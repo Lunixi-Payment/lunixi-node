@@ -1,0 +1,35 @@
+{
+  "name": "@lunixi/node-sdk",
+  "version": "0.1.0",
+  "description": "Lunixi server-side Node.js integration SDK",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "require": "./src/index.js",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "find src test samples -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "keywords": [
+    "lunixi",
+    "payments",
+    "fintech",
+    "sdk"
+  ],
+  "license": "MIT"
+}
