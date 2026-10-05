@@ -6,7 +6,7 @@ import { MerchantPaymentsService } from './payments.service';
 @Module({
   imports: [
     LunixiModule.forRoot({
-      baseUrl: process.env.LUNIXI_BASE_URL || 'https://api.lunixi.io',
+      baseUrl: process.env.LUNIXI_BASE_URL || 'https://api-gateway.lunixi.com',
       keyId: process.env.LUNIXI_KEY_ID || '',
       privateKey: (process.env.LUNIXI_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     }),

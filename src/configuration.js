@@ -1,6 +1,7 @@
 'use strict';
 
 const { ConfigurationError } = require('./errors');
+const { name: PACKAGE_NAME, version: PACKAGE_VERSION } = require('../package.json');
 
 class Configuration {
   constructor(options = {}) {
@@ -10,7 +11,7 @@ class Configuration {
     this.authTokenPath = options.authTokenPath || '/api/v1/auth/token';
     this.timeoutMs = Number.isInteger(options.timeoutMs) ? options.timeoutMs : 30000;
     this.maxRetries = Number.isInteger(options.maxRetries) ? options.maxRetries : 2;
-    this.userAgent = options.userAgent || '@lunixi/node-sdk/0.1.0';
+    this.userAgent = options.userAgent || `${PACKAGE_NAME}/${PACKAGE_VERSION}`;
     this.fetch = options.fetch || globalThis.fetch;
 
     if (typeof this.fetch !== 'function') {

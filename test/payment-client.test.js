@@ -79,13 +79,12 @@ test('raw direct card charge rejects card-only payload', async () => {
   );
 });
 
-test('webhook verifier matches stable JSON payload hash contract', () => {
+test('webhook verifier matches the v2 raw-body HMAC contract', () => {
   const secret = 'whsec_test';
   const rawBody = '{"type":"payment.captured","id":"evt_1","data":{"b":2,"a":1}}';
   const timestamp = new Date().toISOString();
-  const payloadHash = WebhookVerifier.payloadHash(rawBody);
-  const signature = 'sha256=' + crypto.createHmac('sha256', secret)
-    .update(`evt_1.${timestamp}.${payloadHash}`)
+  const signature = 'v2=' + crypto.createHmac('sha256', secret)
+    .update(`evt_1.${timestamp}.${rawBody}`)
     .digest('hex');
 
   const event = new WebhookVerifier(secret).verify(rawBody, {

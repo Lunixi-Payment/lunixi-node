@@ -1,7 +1,12 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { ApiError } = require('./errors');
+const {
+  ApiError,
+  ValidationError,
+  RateLimitError,
+  ServiceUnavailableError,
+} = require('./errors');
 const {
   HEADER_KEY_ID,
   HEADER_DATE,
@@ -19,6 +24,17 @@ class ApiClient {
     this.tokenManager = tokenManager;
   }
 
+  /**
+   * Sends one gateway request.
+   *
+   * Every call carries the bearer access token. `stepUp: true` adds the
+   * per-request Ed25519 signature (`X-Key-Id`, `X-Date`, `X-Nonce`,
+   * `X-Signature` and, with a body, `Digest`); routes guarded by the API-key
+   * signature reject a request without it.
+   *
+   * `binary: true` returns `{ contentType, data: Buffer }` for a 2xx response
+   * instead of parsing JSON (image endpoints). Errors are still read as JSON.
+   */
   async request(method, path, body = null, options = {}) {
     const upperMethod = method.toUpperCase();
     const signedPath = withQuery(path, options.query);
@@ -26,10 +42,11 @@ class ApiClient {
     const rawBody = body === null || body === undefined ? null : JSON.stringify(body);
     const idempotencyKey = options.idempotencyKey || null;
     const idempotent = upperMethod === 'GET' || upperMethod === 'HEAD' || Boolean(idempotencyKey);
+    const accept = options.binary ? BINARY_ACCEPT : JSON_ACCEPT;
     let reAuthed = false;
 
     for (let attempt = 1; ; attempt += 1) {
-      const headers = await this.buildHeaders(upperMethod, signedPath, rawBody, Boolean(options.stepUp), idempotencyKey);
+      const headers = await this.buildHeaders(upperMethod, signedPath, rawBody, Boolean(options.stepUp), idempotencyKey, accept);
 
       let response;
       try {
@@ -47,7 +64,7 @@ class ApiClient {
         throw new ApiError(`Gateway request failed: ${error.message}`, { cause: error });
       }
 
-      if (response.ok) return readJson(response);
+      if (response.ok) return options.binary ? readBinary(response) : readJson(response);
 
       if (response.status === 401 && !reAuthed) {
         this.tokenManager.invalidate();
@@ -64,9 +81,9 @@ class ApiClient {
     }
   }
 
-  async buildHeaders(method, signedPath, rawBody, stepUp, idempotencyKey) {
+  async buildHeaders(method, signedPath, rawBody, stepUp, idempotencyKey, accept = JSON_ACCEPT) {
     const headers = {
-      Accept: 'application/json',
+      Accept: accept,
       'User-Agent': this.config.userAgent,
       Authorization: `Bearer ${await this.tokenManager.getToken()}`,
     };
@@ -90,6 +107,9 @@ class ApiClient {
   }
 }
 
+const JSON_ACCEPT = 'application/json';
+const BINARY_ACCEPT = 'image/svg+xml, image/png, application/json';
+
 function withQuery(path, query) {
   if (!query || Object.keys(query).length === 0) return path;
   const params = new URLSearchParams();
@@ -98,6 +118,13 @@ function withQuery(path, query) {
   }
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
+}
+
+async function readBinary(response) {
+  return {
+    contentType: response.headers?.get?.('content-type') || null,
+    data: Buffer.from(await response.arrayBuffer()),
+  };
 }
 
 async function readJson(response) {
@@ -110,14 +137,54 @@ async function readJson(response) {
   }
 }
 
+function numericHeader(headers, name) {
+  const raw = headers?.get?.(name);
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Quota headers are stamped on 429/503 only, and only when the gateway actually
+ * knows the numbers — it omits a header rather than guessing, so a client that
+ * invented a limit would retry at the wrong rate.
+ */
+function readQuota(headers) {
+  const quota = {
+    rateLimit: numericHeader(headers, 'x-ratelimit-limit'),
+    rateRemaining: numericHeader(headers, 'x-ratelimit-remaining'),
+    rateReset: numericHeader(headers, 'x-ratelimit-reset'),
+    dailyLimit: numericHeader(headers, 'x-quota-limit'),
+    dailyRemaining: numericHeader(headers, 'x-quota-remaining'),
+    dailyReset: numericHeader(headers, 'x-quota-reset'),
+  };
+  return Object.values(quota).some((value) => value !== null) ? quota : null;
+}
+
 async function toApiError(response) {
   const body = await readJson(response);
-  return new ApiError(body.message || `Gateway request failed (HTTP ${response.status}).`, {
+  const options = {
     statusCode: response.status,
     code: body.code,
     response: body,
     requestId: response.headers.get('x-request-id'),
-  });
+  };
+  const message = body.message || `Gateway request failed (HTTP ${response.status}).`;
+
+  if (response.status === 400) return new ValidationError(message, options);
+
+  if (response.status === 429 || response.status === 503) {
+    const retryOptions = {
+      ...options,
+      retryAfter: numericHeader(response.headers, 'retry-after'),
+      quota: readQuota(response.headers),
+    };
+    return response.status === 429
+      ? new RateLimitError(message, retryOptions)
+      : new ServiceUnavailableError(message, retryOptions);
+  }
+
+  return new ApiError(message, options);
 }
 
 async function backoff(attempt) {

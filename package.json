@@ -1,6 +1,6 @@
 {
   "name": "@lunixi/node-sdk",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Lunixi server-side Node.js integration SDK",
   "main": "src/index.js",
   "types": "src/index.d.ts",

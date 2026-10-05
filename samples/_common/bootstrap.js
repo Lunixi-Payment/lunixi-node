@@ -14,7 +14,7 @@ loadEnv(path.join(__dirname, '..', '.env'));
 
 function sampleClient() {
   return new LunixiClient({
-    baseUrl: env('LUNIXI_BASE_URL', 'https://api.lunixi.io'),
+    baseUrl: env('LUNIXI_BASE_URL', 'https://api-gateway.lunixi.com'),
     keyId: requiredEnv('LUNIXI_KEY_ID'),
     privateKey: privateKey(),
   });

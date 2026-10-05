@@ -22,8 +22,6 @@ app.post('/webhooks/lunixi', express.raw({ type: '*/*' }), (req, res) => {
 
   switch (event.type) {
     case 'payment.captured':
-    case 'payment.succeeded':
-    case 'payment.completed':
       break;
     case 'payment.failed':
       break;
