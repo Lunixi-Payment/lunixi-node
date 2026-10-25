@@ -33,7 +33,9 @@ class ApiClient {
    * signature reject a request without it.
    *
    * `binary: true` returns `{ contentType, data: Buffer }` for a 2xx response
-   * instead of parsing JSON (image endpoints). Errors are still read as JSON.
+   * instead of parsing JSON (image, PDF and CSV endpoints). Errors are still
+   * read as JSON. `accept` overrides the `Accept` header (default: images for a
+   * binary request, JSON otherwise; it is not signed).
    */
   async request(method, path, body = null, options = {}) {
     const upperMethod = method.toUpperCase();
@@ -42,7 +44,7 @@ class ApiClient {
     const rawBody = body === null || body === undefined ? null : JSON.stringify(body);
     const idempotencyKey = options.idempotencyKey || null;
     const idempotent = upperMethod === 'GET' || upperMethod === 'HEAD' || Boolean(idempotencyKey);
-    const accept = options.binary ? BINARY_ACCEPT : JSON_ACCEPT;
+    const accept = options.accept || (options.binary ? BINARY_ACCEPT : JSON_ACCEPT);
     let reAuthed = false;
 
     for (let attempt = 1; ; attempt += 1) {
