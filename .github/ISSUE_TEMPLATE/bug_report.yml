@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Lunixi Node.js SDK does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go to developer@lunixi.com, not here (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: The @lunixi/node-sdk version you use.
+      placeholder: e.g. 1.2.3
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime and framework
+      description: Language/runtime version and, if any, the framework version.
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Lunixi environment
+      options:
+        - TEST
+        - LIVE
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal example
+      description: The smallest code that shows the problem. Remove keys, secrets and customer data.
+      render: text
+  - type: input
+    id: request-id
+    attributes:
+      label: Lunixi requestId
+      description: From the error or the response, if you have one.
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed API keys, private keys, webhook secrets, tokens and customer data from this issue.
+          required: true

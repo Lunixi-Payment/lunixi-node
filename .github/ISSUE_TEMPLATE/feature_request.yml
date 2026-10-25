@@ -1,0 +1,21 @@
+name: Feature request
+description: Ask for something Lunixi Node.js SDK does not do yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need
+      description: The problem you want to solve and how you solve it today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How it could work
+      description: The API or behaviour you have in mind, if any.
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: The @lunixi/node-sdk version you use.

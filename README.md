@@ -1,4 +1,17 @@
+<p align="center">
+  <a href="https://lunixi.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Lunixi-Payment/lunixi-node/main/.github/assets/lunixi-logo-dark.svg">
+      <img src="https://raw.githubusercontent.com/Lunixi-Payment/lunixi-node/main/.github/assets/lunixi-logo.svg" alt="Lunixi" height="64">
+    </picture>
+  </a>
+</p>
+
 # Lunixi Node.js SDK
+
+[![CI](https://github.com/Lunixi-Payment/lunixi-node/actions/workflows/ci.yml/badge.svg)](https://github.com/Lunixi-Payment/lunixi-node/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![Downloads](https://img.shields.io/npm/dm/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![Node.js](https://img.shields.io/node/v/@lunixi/node-sdk)](https://nodejs.org) [![Types](https://img.shields.io/npm/types/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![License](https://img.shields.io/npm/l/@lunixi/node-sdk)](LICENSE) [![Docs](https://img.shields.io/badge/docs-docs.lunixi.com-FF6B35)](https://docs.lunixi.com/sdks/node)
+
+**[Documentation](https://docs.lunixi.com/sdks/node) · [Changelog](https://github.com/Lunixi-Payment/lunixi-node/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-node/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-node/blob/main/SECURITY.md)**
 
 Server-side Node.js SDK for Lunixi payment integrations. The SDK is framework-agnostic and works with Express, Fastify, NestJS, Hapi, serverless functions, and plain Node.js.
 

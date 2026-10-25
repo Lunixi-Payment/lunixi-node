@@ -1,6 +1,6 @@
 'use strict';
 
-// KARMA-ODEME M22: 3D Secure display (form setting), the continuation page's
+// 3D Secure display (form setting), the continuation page's
 // result (`completion`) and its error codes. Values follow the gateway
 // (UpdateFormSettingsDto.threeDsDisplay, error catalog) and the PHP SDK.
 
@@ -63,7 +63,11 @@ test('index.d.ts types the form and continuation page fields of a split answer',
   assert.deepEqual(keys, ['_signature', '_timestamp', 'code', 'message', 'orderId', 'paymentId', 'status', 'success']);
 });
 
-test('the PHP SDK has the same values', () => {
+// The PHP SDK sits beside this one in Lunixi's source repository; a standalone
+// checkout of this package has no copy to compare with.
+const PARITY = fs.existsSync(PHP_PAYMENT) ? {} : { skip: 'Parity with the PHP SDK is checked in the Lunixi source repository only.' };
+
+test('the PHP SDK has the same values', PARITY, () => {
   assert.deepEqual(phpConstants('ThreeDsDisplay.php'), { ...ThreeDsDisplay });
   assert.deepEqual(phpConstants('SplitCompletionOutcome.php'), { ...SplitCompletionOutcome });
   assert.deepEqual(phpConstants('SplitPayErrorCode.php'), { ...SplitPayErrorCode });
