@@ -4,7 +4,7 @@ const express = require('express');
 const {
   LunixiClient,
   CreateIntentRequest,
-  DirectPaymentRequest,
+  DirectMethodPaymentRequest,
   CardDetails,
   Buyer,
   Address,
@@ -39,26 +39,24 @@ app.post('/checkout/intents', async (req, res, next) => {
   }
 });
 
-app.post('/payments/direct-3d', async (req, res, next) => {
+app.post('/payments/card-3d', async (req, res, next) => {
   try {
-    const orderId = `ORD-DIRECT-3D-${Date.now()}`;
-    const result = await lunixi.payments.chargeCard3d(
-      new DirectPaymentRequest(
-        10050,
-        'TRY',
-        orderId,
-        new CardDetails({
+    const orderId = `ORD-CARD-3D-${Date.now()}`;
+    const result = await lunixi.payments.directMethodPayment(
+      new DirectMethodPaymentRequest(10050, 'TRY', orderId)
+        .withCard(new CardDetails({
           cardHolderName: 'Ada Yilmaz',
           cardNumber: '5400000000000004',
           expireMonth: '12',
           expireYear: '28',
           cvcNumber: '123',
-        }),
-        sampleBuyer(req.ip),
-        sampleBillingAddress(),
-        sampleBasketItems(),
-      ),
-      `direct-3d:${orderId}`,
+        }))
+        .withForce3D(true)
+        .withCallbackUrl('https://merchant.example/payment/callback')
+        .withBuyer(sampleBuyer(req.ip))
+        .withBillingAddress(sampleBillingAddress())
+        .withBasketItems(sampleBasketItems()),
+      `card-3d:${orderId}`,
     );
     res.json(result);
   } catch (error) {

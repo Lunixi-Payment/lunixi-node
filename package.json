@@ -1,7 +1,19 @@
 {
   "name": "@lunixi/node-sdk",
-  "version": "0.5.0",
+  "version": "0.20.0",
   "description": "Lunixi server-side Node.js integration SDK",
+  "homepage": "https://github.com/Lunixi-Payment/lunixi-node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lunixi-Payment/lunixi-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lunixi-Payment/lunixi-node/issues"
+  },
+  "author": {
+    "name": "Lunixi",
+    "url": "https://lunixi.com"
+  },
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "type": "commonjs",
@@ -15,6 +27,7 @@
   "files": [
     "src",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -31,5 +44,8 @@
     "fintech",
     "sdk"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }

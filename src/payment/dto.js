@@ -12,6 +12,21 @@ const {
   CustomFieldType,
   ASSET_ID_PATTERN,
 } = require('./payment-link-values');
+const {
+  PaymentMethod,
+  CARD_ONLY_FIELDS,
+  METHOD_BLOCK_FIELDS,
+  normalizePaymentMethod,
+  blockNameOf,
+  requireProviderCode,
+  requireMethodFields,
+} = require('./payment-method-values');
+const {
+  requirePromissoryNoteSchedule,
+  assertScheduleMatchesAmount,
+  requireNoteCount,
+  assertPromissoryNotePlan,
+} = require('./promissory-note-values');
 
 /** Keys of the nested objects of a payment link, as the gateway DTO declares them. */
 const BUYER_FIELD_KEYS = ['name', 'email', 'phone', 'address', 'identityNumber'];
@@ -61,14 +76,20 @@ class BasketItem {
   }
 }
 
+/**
+ * Body of `POST /api/v1/payments/intents` (hosted checkout) and of
+ * `payments.createMarketplaceIntent()`.
+ *
+ * `amount` is the only amount field: the basket total in minor units (integer,
+ * at least 1), without any installment fee. With basket items, their `price`
+ * values must add up to `amount`. The buyer picks the installment on the hosted
+ * form; the system adds the installment fee to the charged amount.
+ */
 class CreateIntentRequest {
   constructor(amount, currency, orderId) {
-    this.payload = { amount, currency: normalizeCurrency(currency), orderId };
+    this.payload = { amount: requirePositiveMinor(amount, 'amount'), currency: normalizeCurrency(currency), orderId };
   }
 
-  withPrice(value) { this.payload.price = value; return this; }
-  withPaidPrice(value) { this.payload.paidPrice = value; return this; }
-  withInstallment(value) { this.payload.installment = value; return this; }
   withCallbackUrl(value) { this.payload.callbackUrl = value; return this; }
   withDescription(value) { this.payload.description = value; return this; }
   withCustomerId(value) { this.payload.customerId = value; return this; }
@@ -76,7 +97,26 @@ class CreateIntentRequest {
   withMethod(value) { this.payload.method = value; return this; }
   withPaymentMethod(value) { this.payload.paymentMethod = value; return this; }
   withWalletProvider(value) { this.payload.walletProvider = value; return this; }
+  /**
+   * Senetle Ödeme on the hosted form: your schedule of notes (`[{ amount,
+   * dueDate }]`, amounts in minor units adding up to `amount`, `YYYY-MM-DD`
+   * dates in ascending order, at most 24 rows). The form shows the plan and the
+   * buyer does not choose a note count. Without it the buyer picks the number
+   * of notes within your provider connection limits. Only with no
+   * `paymentMethod` or with `PROMISSORY_NOTE`.
+   */
+  withPromissoryNoteSchedule(schedule) {
+    this.payload.promissoryNote = { schedule: requirePromissoryNoteSchedule(schedule) };
+    return this;
+  }
   withForce3D(value) { this.payload.force3D = Boolean(value); return this; }
+  /**
+   * Pre-authorization. `true` holds the amount on the card and the payment
+   * becomes `AUTHORIZED`; take it later with `payments.capture()` or release it
+   * with `payments.void()`. `false` (or not calling this) captures immediately.
+   * Also used by `payments.createMarketplaceIntent()`.
+   */
+  withPreauth(value) { this.payload.preauth = requirePreauth(value); return this; }
   withSettings(value) { this.payload.settings = value; return this; }
   withPaymentChannel(value) { this.payload.paymentChannel = value; return this; }
   withPaymentGroup(value) { this.payload.paymentGroup = value; return this; }
@@ -87,38 +127,185 @@ class CreateIntentRequest {
   withMetadata(value) { this.payload.metadata = value; return this; }
 
   toJSON() {
+    if (this.payload.promissoryNote) {
+      if (this.payload.paymentMethod !== undefined && this.payload.paymentMethod !== null
+        && this.payload.paymentMethod !== PaymentMethod.PROMISSORY_NOTE) {
+        throw new ConfigurationError(`A promissory-note schedule cannot be sent with paymentMethod ${this.payload.paymentMethod}.`);
+      }
+      assertScheduleMatchesAmount(this.payload.promissoryNote.schedule, this.payload.amount);
+    }
     return compact(this.payload);
   }
 }
 
-class DirectPaymentRequest {
-  constructor(paidPrice, currency, orderId, card, buyer, billingAddress, basketItems) {
-    if (!Array.isArray(basketItems) || basketItems.length === 0) {
-      throw new ConfigurationError('Direct payments require at least one basket item.');
-    }
+/**
+ * Body of `POST /api/v1/payments/direct/payment` (`payments.directMethodPayment()`):
+ * a payment with any payment method, started from the merchant server.
+ *
+ * Choose the method with exactly one of:
+ *   - `withMethodFields(method, providerCode, fields)` for a method other than
+ *     card (Faturana Yansıt, wallets …). The fields are the provider's
+ *     `inputFields` from `payments.listPaymentMethods()`; `providerCode` may be
+ *     `null` when the method's `providerSelection` is `OPTIONAL` (on a
+ *     `providerSelectionMode: PLATFORM` method the platform then picks it).
+ *     Senetle Ödeme (`PROMISSORY_NOTE`) also needs the plan:
+ *     `withPromissoryNoteSchedule(schedule)` or `withPromissoryNoteCount(count)`.
+ *   - `withCard(card)` for a card: the only server-side card charge. Without
+ *     `withForce3D()` it is charged without 3D Secure (the bank may still ask
+ *     for it: the response then carries a `REDIRECT` action);
+ *     `withForce3D(true)` charges with 3D Secure and the response carries a
+ *     `REDIRECT` action. A stored card is charged with `cardUserKey` +
+ *     `cardToken` in `CardDetails`.
+ *
+ * Order fields: buyer, billingAddress, shippingAddress, basketItems,
+ * paymentChannel, paymentGroup, description, customerId, metadata. `amount` is the
+ * only amount field: the basket total in minor units (integer, at least 1),
+ * without any installment fee; basket item `price` values must add up to it.
+ */
+class DirectMethodPaymentRequest {
+  constructor(amount, currency, orderId) {
     this.payload = {
-      paidPrice,
-      currency: normalizeCurrency(currency),
-      orderId,
-      card: toPlain(card),
-      buyer: toPlain(buyer),
-      billingAddress: toPlain(billingAddress),
-      basketItems: basketItems.map(toPlain),
+      amount: requirePositiveMinor(amount, 'amount'),
+      currency: requireText(normalizeCurrency(currency), 'currency'),
+      orderId: requireText(orderId, 'orderId'),
     };
+    this.paymentMethod = null;
+    this.block = null;
+    this.promissoryNotePlan = null;
   }
 
-  withPrice(value) { this.payload.price = value; return this; }
-  withInstallment(value) { this.payload.installment = value; return this; }
-  withCallbackUrl(value) { this.payload.callbackUrl = value; return this; }
+  /**
+   * Pays with a method other than card. `fields` are the provider's
+   * `inputFields` values (e.g. `{ gsmNumber: '+905321234567' }` for Faturana
+   * Yansıt); `{}` when the provider asks for nothing or the value comes from
+   * `buyer` (`prefill`). `providerCode` is required when the method lists more
+   * than one provider (`providerSelection: REQUIRED`).
+   */
+  withMethodFields(paymentMethod, providerCode, fields = {}) {
+    const code = normalizePaymentMethod(paymentMethod);
+    if (code === PaymentMethod.CARD) {
+      throw new ConfigurationError('Use withCard(card) to pay by card.');
+    }
+    const blockName = blockNameOf(code);
+    if (!METHOD_BLOCK_FIELDS.includes(blockName)) {
+      throw new ConfigurationError(`paymentMethod ${code} cannot be paid through direct/payment yet; payments.listPaymentMethods() lists the methods that can.`);
+    }
+    const block = requireMethodFields(fields, blockName);
+    if (code === PaymentMethod.PROMISSORY_NOTE && block.schedule !== undefined) {
+      throw new ConfigurationError('Pass the promissory-note schedule with withPromissoryNoteSchedule(schedule), not in the fields.');
+    }
+    if (code === PaymentMethod.PROMISSORY_NOTE && block.noteCount !== undefined) {
+      block.noteCount = requireNoteCount(block.noteCount);
+    }
+    this.paymentMethod = code;
+    this.block = providerCode === null || providerCode === undefined
+      ? block
+      : { providerCode: requireProviderCode(providerCode), ...block };
+    return this;
+  }
+
+  /**
+   * Senetle Ödeme plan: one note per row, `[{ amount, dueDate }]`. Amounts are
+   * positive integers in minor units adding up to `amount`; due dates are
+   * `YYYY-MM-DD` (Istanbul calendar), after today, in ascending order, at most
+   * 24 rows. Use with `withMethodFields(PaymentMethod.PROMISSORY_NOTE, …)`;
+   * replaces a note count.
+   */
+  withPromissoryNoteSchedule(schedule) {
+    this.promissoryNotePlan = { schedule: requirePromissoryNoteSchedule(schedule) };
+    return this;
+  }
+
+  /**
+   * Senetle Ödeme plan: the number of notes (1–24, within your provider
+   * connection limits; the `noteCount` options in `inputFields`). The amount is
+   * split evenly, the remaining minor units go to the last note; due dates
+   * follow your connection settings. Replaces a schedule.
+   */
+  withPromissoryNoteCount(count) {
+    this.promissoryNotePlan = { noteCount: requireNoteCount(count) };
+    return this;
+  }
+
+  /** Pays by card (`CardDetails`: new card fields, or `cardUserKey` + `cardToken` for a stored card). */
+  withCard(card) {
+    const plain = toPlain(card);
+    if (!plain || typeof plain !== 'object' || Array.isArray(plain) || Object.keys(plain).length === 0) {
+      throw new ConfigurationError('withCard requires a non-empty CardDetails.');
+    }
+    this.paymentMethod = PaymentMethod.CARD;
+    this.block = { ...plain };
+    return this;
+  }
+
+  /**
+   * Card only. `quoteToken` binds the charge to a quote from
+   * `payments.installmentOptions()`; the system adds the quoted installment fee
+   * to `amount`.
+   */
+  withInstallment(value, quoteToken = null) {
+    this.payload.installment = requireInteger(value, 'installment');
+    if (quoteToken !== null && quoteToken !== undefined) this.payload.installmentQuoteToken = requireText(quoteToken, 'installmentQuoteToken');
+    return this;
+  }
+
+  /** Card only. `true` charges with 3D Secure: the response carries a `REDIRECT` action. */
+  withForce3D(value) {
+    if (typeof value !== 'boolean') throw new ConfigurationError(`force3D must be a boolean; got ${JSON.stringify(value)}.`);
+    this.payload.force3D = value;
+    return this;
+  }
+
+  /**
+   * Pre-authorization. `true` holds the amount and the payment becomes
+   * `AUTHORIZED`; take it with `payments.capture()` or release it with
+   * `payments.void()`. A method whose providers do not support it
+   * (`preauth: false` in `payments.listPaymentMethods()`) is refused with 422
+   * `payment.preauth.unsupported_for_method`.
+   */
+  withPreauth(value) { this.payload.preauth = requirePreauth(value); return this; }
+  /** Where the buyer's browser returns after a `REDIRECT` action, with the signed result form. */
+  withCallbackUrl(value) { this.payload.callbackUrl = requireText(value, 'callbackUrl'); return this; }
+  withLocale(value) { this.payload.locale = requireText(value, 'locale'); return this; }
   withDescription(value) { this.payload.description = value; return this; }
   withCustomerId(value) { this.payload.customerId = value; return this; }
-  withCardUserKey(value) { this.payload.cardUserKey = value; return this; }
   withPaymentChannel(value) { this.payload.paymentChannel = value; return this; }
   withPaymentGroup(value) { this.payload.paymentGroup = value; return this; }
+  withBuyer(value) { this.payload.buyer = toPlain(value); return this; }
+  withBillingAddress(value) { this.payload.billingAddress = toPlain(value); return this; }
+  withShippingAddress(value) { this.payload.shippingAddress = toPlain(value); return this; }
+  withBasketItems(value) {
+    if (!Array.isArray(value)) throw new ConfigurationError('basketItems must be an array.');
+    this.payload.basketItems = value.map(toPlain);
+    return this;
+  }
   withMetadata(value) { this.payload.metadata = value; return this; }
 
   toJSON() {
-    return compact(this.payload);
+    if (!this.paymentMethod) {
+      throw new ConfigurationError('Choose the payment method with withMethodFields(method, providerCode, fields) or withCard(card).');
+    }
+    if (this.paymentMethod !== PaymentMethod.CARD) {
+      const cardField = CARD_ONLY_FIELDS.find((field) => this.payload[field] !== undefined);
+      if (cardField) throw new ConfigurationError(`${cardField} can only be sent with a card payment (withCard).`);
+    }
+    const block = { ...this.block };
+    if (this.paymentMethod === PaymentMethod.PROMISSORY_NOTE) {
+      if (this.promissoryNotePlan) {
+        if (block.noteCount !== undefined) {
+          throw new ConfigurationError('The promissory-note plan is given twice: noteCount in the fields and withPromissoryNoteSchedule()/withPromissoryNoteCount(). Use one.');
+        }
+        Object.assign(block, this.promissoryNotePlan);
+      }
+      assertPromissoryNotePlan(block, this.payload.amount);
+    } else if (this.promissoryNotePlan) {
+      throw new ConfigurationError('A promissory-note plan can only be sent with paymentMethod PROMISSORY_NOTE.');
+    }
+    return compact({
+      paymentMethod: this.paymentMethod,
+      ...this.payload,
+      [blockNameOf(this.paymentMethod)]: block,
+    });
   }
 }
 
@@ -390,6 +577,34 @@ class CreatePaymentLinkRequest {
   }
 }
 
+/**
+ * Amount fields the gateway removed: `amount` is the only amount field of the
+ * intent, marketplace and `direct/payment` bodies. A body that
+ * still carries one of these is refused with 400 `payment.amount.field_removed`
+ * (any value, `null` included), so the SDK refuses it before sending. A basket
+ * item keeps its own `price`.
+ */
+const REMOVED_AMOUNT_FIELDS = Object.freeze(['price', 'paidPrice']);
+
+function assertNoRemovedAmountFields(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return;
+  const sent = REMOVED_AMOUNT_FIELDS.filter((field) => body[field] !== undefined);
+  if (sent.length > 0) {
+    throw new ConfigurationError(`${sent.join(', ')}: removed from the payment body; send the amount only in 'amount' (minor units, the basket total without the installment fee).`);
+  }
+}
+
+/**
+ * `preauth` is a money instruction: only a real boolean is sent. A string such
+ * as "false" would otherwise reach the gateway and be refused with 400.
+ */
+function requirePreauth(value) {
+  if (typeof value !== 'boolean') {
+    throw new ConfigurationError(`preauth must be a boolean (true = pre-authorization, false = immediate capture); got ${JSON.stringify(value)}.`);
+  }
+  return value;
+}
+
 function requireOneOf(value, values, field) {
   const allowed = Object.values(values);
   if (!allowed.includes(value)) {
@@ -416,6 +631,13 @@ function requireInteger(value, field) {
 function requireMinor(value, field) {
   if (!Number.isSafeInteger(value)) {
     throw new ConfigurationError(`${field} must be an integer amount in minor units (e.g. 150000 for 1,500.00 TRY); got ${JSON.stringify(value)}.`);
+  }
+  return value;
+}
+
+function requirePositiveMinor(value, field) {
+  if (requireMinor(value, field) < 1) {
+    throw new ConfigurationError(`${field} must be a positive amount in minor units; got ${JSON.stringify(value)}.`);
   }
   return value;
 }
@@ -505,7 +727,7 @@ module.exports = {
   Address,
   BasketItem,
   CreateIntentRequest,
-  DirectPaymentRequest,
+  DirectMethodPaymentRequest,
   InstallmentOptionsRequest,
   StoreCardRequest,
   PaymentLinkItem,
@@ -513,4 +735,7 @@ module.exports = {
   CreatePaymentLinkRequest,
   toPlain,
   isoOrNull,
+  requirePreauth,
+  REMOVED_AMOUNT_FIELDS,
+  assertNoRemovedAmountFields,
 };
