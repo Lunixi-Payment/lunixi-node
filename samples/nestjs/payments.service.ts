@@ -4,7 +4,7 @@ import {
   BasketItem,
   Buyer,
   CreateIntentRequest,
-  DirectPaymentRequest,
+  DirectMethodPaymentRequest,
   CardDetails,
   LunixiClient,
 } from '../../src';
@@ -26,27 +26,24 @@ export class MerchantPaymentsService {
     return this.lunixi.payments.createIntent(request, `checkout:${input.orderId}`);
   }
 
-  chargeDirect3d(input: { orderId: string; amount: number; buyerIp: string }) {
-    const request = new DirectPaymentRequest(
-      input.amount,
-      'TRY',
-      input.orderId,
-      new CardDetails({
+  payByCard3d(input: { orderId: string; amount: number; buyerIp: string }) {
+    const request = new DirectMethodPaymentRequest(input.amount, 'TRY', input.orderId)
+      .withCard(new CardDetails({
         cardHolderName: 'Ada Yilmaz',
         cardNumber: '5400000000000004',
         expireMonth: '12',
         expireYear: '28',
         cvcNumber: '123',
-      }),
-      sampleBuyer(input.buyerIp),
-      sampleBillingAddress(),
-      sampleBasketItems(input.amount),
-    )
+      }))
+      .withForce3D(true)
       .withCallbackUrl('https://merchant.example/payments/3ds/callback')
       .withPaymentChannel('WEB')
-      .withPaymentGroup('PRODUCT');
+      .withPaymentGroup('PRODUCT')
+      .withBuyer(sampleBuyer(input.buyerIp))
+      .withBillingAddress(sampleBillingAddress())
+      .withBasketItems(sampleBasketItems(input.amount));
 
-    return this.lunixi.payments.chargeCard3d(request, `direct-3d:${input.orderId}`);
+    return this.lunixi.payments.directMethodPayment(request, `card-3d:${input.orderId}`);
   }
 
   capture(paymentId: string) {
