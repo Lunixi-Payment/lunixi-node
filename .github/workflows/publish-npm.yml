@@ -1,12 +1,12 @@
 name: Publish npm with Trusted Publishing
 
-# Manual only. Dispatch from the exact existing release tag, not from main:
-# npm provenance binds GITHUB_REF/GITHUB_SHA to the workflow invocation.
+# Manual only. Select the matching release tag or workflow-only publication tag,
+# never main. npm provenance binds GITHUB_REF/GITHUB_SHA to that invocation.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing tested version without v; select the matching tag above
+        description: Existing tested version without v; select its vVERSION or npm-publish-vVERSION tag above
         required: true
         default: '0.20.1'
         type: string
@@ -55,22 +55,36 @@ jobs:
           assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version), 'Invalid numeric version'
           repo = 'Lunixi-Payment/lunixi-node'
           assert os.environ['GITHUB_REPOSITORY'] == repo
-          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version, 'Dispatch from the exact release tag, not main'
+          tag = os.environ['GITHUB_REF_NAME']
+          assert tag in {'v' + version, 'npm-publish-v' + version}, 'Select the matching release or publication tag'
+          assert os.environ['GITHUB_REF'] == 'refs/tags/' + tag, 'Dispatch from a tag, not main'
           def api(path):
               request = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + path,
                   headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
               with urllib.request.urlopen(request, timeout=30) as response:
                   return json.load(response)
-          obj = api('git/ref/tags/v' + version)['object']
-          for _ in range(4):
-              assert re.fullmatch(r'[0-9a-f]{40}', obj['sha']), 'Invalid tag object'
-              if obj['type'] == 'commit':
-                  break
-              assert obj['type'] == 'tag', 'Tag does not identify a commit'
-              obj = api('git/tags/' + obj['sha'])['object']
-          assert obj['type'] == 'commit', 'Excessive annotated-tag indirection'
-          sha = obj['sha']
+          def resolve_tag(name):
+              obj = api('git/ref/tags/' + name)['object']
+              for _ in range(4):
+                  assert re.fullmatch(r'[0-9a-f]{40}', obj['sha']), 'Invalid tag object'
+                  if obj['type'] == 'commit':
+                      break
+                  assert obj['type'] == 'tag', 'Tag does not identify a commit'
+                  obj = api('git/tags/' + obj['sha'])['object']
+              assert obj['type'] == 'commit' and re.fullmatch(r'[0-9a-f]{40}', obj['sha']), 'Invalid annotated tag'
+              return obj['sha']
+          sha = resolve_tag(tag)
           assert sha == os.environ['GITHUB_SHA'], 'Tag moved or dispatch source differs'
+          if tag == 'npm-publish-v' + version:
+              original_sha = resolve_tag('v' + version)
+              comparison = api('compare/' + original_sha + '...' + sha + '?per_page=100')
+              assert comparison['status'] == 'ahead' and comparison['behind_by'] == 0, 'Original release must be an ancestor'
+              assert comparison['base_commit']['sha'] == original_sha and comparison['merge_base_commit']['sha'] == original_sha
+              assert 0 < comparison['ahead_by'] == comparison['total_commits'] <= 100, 'Bounded complete comparison required'
+              assert len(comparison['commits']) == comparison['total_commits'] and comparison['commits'][-1]['sha'] == sha
+              files = comparison['files']
+              assert len(files) == 1 and files[0]['filename'] == '.github/workflows/publish-npm.yml', 'Only publication workflow changes are allowed'
+              assert files[0]['status'] == 'modified' and 'previous_filename' not in files[0], 'Workflow rename/addition is not a publication fix'
           runs = api('actions/workflows/ci.yml/runs?' + urllib.parse.urlencode({'head_sha': sha, 'event': 'push', 'per_page': 100}))
           assert any(r.get('head_sha') == sha and r.get('event') == 'push'
                      and r.get('status') == 'completed' and r.get('conclusion') == 'success'
@@ -153,7 +167,7 @@ jobs:
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           (directory / 'SHA256SUMS').write_text(digest + '  ' + filename + '\n')
           (directory / 'RELEASE.json').write_text(json.dumps({'name': '@lunixi/node-sdk', 'version': version,
-              'sourceSha': os.environ['SOURCE_SHA'], 'tag': 'v' + version, 'filename': filename, 'sha256': digest}, sort_keys=True) + '\n')
+              'sourceSha': os.environ['SOURCE_SHA'], 'tag': os.environ['GITHUB_REF_NAME'], 'filename': filename, 'sha256': digest}, sort_keys=True) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha256=' + digest + '\n')
           PY
@@ -199,7 +213,9 @@ jobs:
           version = os.environ['VERSION']
           assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
           assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-node'
-          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version
+          tag = os.environ['GITHUB_REF_NAME']
+          assert tag in {'v' + version, 'npm-publish-v' + version}
+          assert os.environ['GITHUB_REF'] == 'refs/tags/' + tag
           assert re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_SHA'])
           assert os.environ['GITHUB_SHA'] == os.environ['SOURCE_SHA']
           directory = pathlib.Path('package')
@@ -211,7 +227,7 @@ jobs:
           assert digest == os.environ['EXPECTED_SHA256']
           assert (directory / 'SHA256SUMS').read_text() == digest + '  ' + filename + '\n'
           assert json.loads((directory / 'RELEASE.json').read_text()) == {'name': '@lunixi/node-sdk', 'version': version,
-              'sourceSha': os.environ['SOURCE_SHA'], 'tag': 'v' + version, 'filename': filename, 'sha256': digest}
+              'sourceSha': os.environ['SOURCE_SHA'], 'tag': os.environ['GITHUB_REF_NAME'], 'filename': filename, 'sha256': digest}
           with tarfile.open(archive, 'r:gz') as tar:
               seen = set()
               members = tar.getmembers()
@@ -248,5 +264,5 @@ jobs:
       - name: Publish the verified tarball using OIDC and provenance
         run: |
           set -euo pipefail
-          env -u NPM_TOKEN -u NODE_AUTH_TOKEN npm publish "package/lunixi-node-sdk-${VERSION}.tgz" \
+          env -u NPM_TOKEN -u NODE_AUTH_TOKEN npm publish "./package/lunixi-node-sdk-${VERSION}.tgz" \
             --registry=https://registry.npmjs.org/ --access=public --provenance --ignore-scripts
