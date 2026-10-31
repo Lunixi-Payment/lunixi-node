@@ -44,10 +44,14 @@ configure it only when the reviewed release is ready.
    `ci.yml` **push CI on that exact commit**. This workflow does not rerun the
    functional suite or accept successful CI from another revision.
 2. On **Actions → Publish npm with Trusted Publishing → Run workflow**, choose
-   **tag `v0.20.1`**, and enter version **`0.20.1`**. Future versions must likewise
-   use their exact `v<version>` tag. Dispatching from `main` fails deliberately:
-   npm provenance takes its source identity from the invocation's
-   `GITHUB_REF`/`GITHUB_SHA`, so a main invocation must not attest an older tag.
+   the exact `v<version>` tag and enter the numeric package version. For the
+   existing **0.20.1** release, select **`npm-publish-v0.20.1`**: it contains only
+   the corrected publishing workflow, while the original `v0.20.1` remains
+   unchanged. This publication tag must descend from that original release and
+   the complete comparison may modify only `.github/workflows/publish-npm.yml`;
+   SDK, dependency, README and other changes are rejected. Its exact commit
+   must also have successful push CI. Never dispatch from `main`: provenance
+   identifies the invocation's `GITHUB_REF`/`GITHUB_SHA`.
 3. The read-only builder resolves and peels the public tag, checks the full
    immutable commit against the dispatch SHA, checks exact package/repository
    identity, and refuses an existing npm version. It scans source with the
@@ -59,7 +63,9 @@ configure it only when the reviewed release is ready.
    its SHA256, manifest and release/source receipt without executing package
    code. Only this job has `id-token: write`. It uses checksum-pinned npm
    **12.2.1** on Node **24.22.2**, fresh npm configuration, no stored token and
-   `npm publish --provenance --ignore-scripts`. No dependency install or package
+   `npm publish "./package/lunixi-node-sdk-${VERSION}.tgz" --provenance --ignore-scripts`.
+   The explicit `./` keeps the argument a local file; Git-package fetching stays
+   disabled. No dependency install or package
    lifecycle runs in this job; only the pinned official npm client is installed.
 5. Verify the exact npm version, tarball SHA/integrity and provenance after the
    job succeeds. A source tag, uploaded Actions artifact or configured publisher
@@ -72,6 +78,10 @@ Artifacts contain only the package tarball, `SHA256SUMS` and a public
 registry secrets, account changes, GitHub write permissions or deployment
 environments. Repository/tag write access remains publishing authority; protect
 release tags and review workflow changes through the project's normal controls.
+
+## Verified 0.20.1 publication
+
+[Release workflow 41244931843](https://github.com/Lunixi-Payment/lunixi-node/actions/runs/41244931843) passed from immutable publication source `8349b9c4de5405917a8440cde47fce1c90eb3066`. [npm 0.20.1](https://www.npmjs.com/package/@lunixi/node-sdk/v/0.20.1) is available. Its downloaded archive has SHA-256 `9290d3d3b2aafa35c85bdb7d70e722529847426b62c5b5345d673c457568473e`; all 38 package files match the reviewed release. Archive compression bytes can differ from the local prepared tarball; verify the actual registry integrity and file content. The same package provides Express/NestJS checkout examples in its source repository.
 
 ## References
 

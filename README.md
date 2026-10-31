@@ -15,7 +15,7 @@
 
 Server-side Node.js SDK for Lunixi payment integrations. The SDK is framework-agnostic and works with Express, Fastify, NestJS, Hapi, serverless functions, and plain Node.js.
 
-Requires Node.js 18+. Checkout improvements below are prepared in source 0.20.1; the last verified npm version is 0.20.0 until the new registry release is confirmed.
+Requires Node.js 18+. Checkout improvements below are published in [npm 0.20.1](https://www.npmjs.com/package/@lunixi/node-sdk/v/0.20.1). All 38 downloaded package files match the reviewed release; registry integrity is verified. Express and NestJS use this same package.
 
 ## Install
 
