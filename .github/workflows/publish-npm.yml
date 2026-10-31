@@ -1,0 +1,252 @@
+name: Publish npm with Trusted Publishing
+
+# Manual only. Dispatch from the exact existing release tag, not from main:
+# npm provenance binds GITHUB_REF/GITHUB_SHA to the workflow invocation.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing tested version without v; select the matching tag above
+        required: true
+        default: '0.20.1'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-lunixi-node-sdk
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    if: github.repository == 'Lunixi-Payment/lunixi-node'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      VERSION: ${{ inputs.version }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npm-publish-user.npmrc
+      NPM_CONFIG_GLOBALCONFIG: ${{ github.workspace }}/.npm-publish-global.npmrc
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+      NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+      NPM_TOKEN: ''
+      NODE_AUTH_TOKEN: ''
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      version: ${{ steps.source.outputs.version }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - name: Resolve exact public tag and require successful CI on that commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.error, urllib.parse, urllib.request
+          version = os.environ['VERSION']
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version), 'Invalid numeric version'
+          repo = 'Lunixi-Payment/lunixi-node'
+          assert os.environ['GITHUB_REPOSITORY'] == repo
+          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version, 'Dispatch from the exact release tag, not main'
+          def api(path):
+              request = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          obj = api('git/ref/tags/v' + version)['object']
+          for _ in range(4):
+              assert re.fullmatch(r'[0-9a-f]{40}', obj['sha']), 'Invalid tag object'
+              if obj['type'] == 'commit':
+                  break
+              assert obj['type'] == 'tag', 'Tag does not identify a commit'
+              obj = api('git/tags/' + obj['sha'])['object']
+          assert obj['type'] == 'commit', 'Excessive annotated-tag indirection'
+          sha = obj['sha']
+          assert sha == os.environ['GITHUB_SHA'], 'Tag moved or dispatch source differs'
+          runs = api('actions/workflows/ci.yml/runs?' + urllib.parse.urlencode({'head_sha': sha, 'event': 'push', 'per_page': 100}))
+          assert any(r.get('head_sha') == sha and r.get('event') == 'push'
+                     and r.get('status') == 'completed' and r.get('conclusion') == 'success'
+                     and (r.get('head_repository') or {}).get('full_name') == repo
+                     for r in runs['workflow_runs']), 'Successful push CI required for the exact release commit'
+          url = 'https://registry.npmjs.org/@lunixi%2fnode-sdk/' + version
+          try:
+              with urllib.request.urlopen(url, timeout=20):
+                  raise RuntimeError('Registry version already exists; refusing replacement')
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('source_sha=' + sha + '\nversion=' + version + '\n')
+          print('Release tag, immutable source, CI and registry preflight verified.')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+      - name: Install checksum-pinned Gitleaks
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 --max-time 60 --proto '=https' --proto-redir '=https' \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/gitleaks-bin"
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks-bin" gitleaks
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Verify fixture exceptions, negative controls and complete source
+        run: |
+          set -euo pipefail
+          python3 tools/check-secret-fixtures.py
+          gitleaks dir . --config .gitleaks.toml --gitleaks-ignore-path /dev/null \
+            --ignore-gitleaks-allow --redact=100 --no-banner
+      - name: Check syntax and pack without lifecycle scripts or functional reruns
+        id: pack
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          : > "$NPM_CONFIG_USERCONFIG"
+          : > "$NPM_CONFIG_GLOBALCONFIG"
+          node -e 'const p=require("./package.json");if(p.name!=="@lunixi/node-sdk"||p.version!==process.env.VERSION||p.repository.url!=="git+https://github.com/Lunixi-Payment/lunixi-node.git")throw Error("Unexpected package identity")'
+          # No dependencies or generated build step: this SDK ships CommonJS source.
+          find src test samples -name '*.js' -print0 | xargs -0 -n1 node --check
+          mkdir package
+          npm pack --ignore-scripts --json --pack-destination package > "$RUNNER_TEMP/npm-pack.json"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          version = os.environ['VERSION']
+          directory = pathlib.Path('package')
+          filename = 'lunixi-node-sdk-' + version + '.tgz'
+          assert sorted(p.name for p in directory.iterdir()) == [filename], 'Unexpected package files'
+          archive = directory / filename
+          assert archive.stat().st_size <= 8 * 1024 * 1024, 'Oversized package'
+          extraction = pathlib.Path(os.environ['RUNNER_TEMP']) / 'npm-package-inspection'
+          extraction.mkdir()
+          with tarfile.open(archive, 'r:gz') as tar:
+              seen = set()
+              members = tar.getmembers()
+              assert len(members) <= 1024 and sum(item.size for item in members) <= 32 * 1024 * 1024
+              for item in members:
+                  path = pathlib.PurePosixPath(item.name)
+                  assert item.isfile() and not path.is_absolute() and '..' not in path.parts and item.name not in seen
+                  assert path.as_posix() == item.name and '\\' not in item.name
+                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE'} or item.name.startswith('package/src/')
+                  assert item.size <= 8 * 1024 * 1024 and path.name not in {'.npmrc', '.gitleaks.toml', '.gitleaksignore'}
+                  seen.add(item.name)
+                  target = extraction.joinpath(*path.parts)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(tar.extractfile(item).read())
+              manifest = json.loads(tar.extractfile('package/package.json').read())
+              assert manifest['name'] == '@lunixi/node-sdk' and manifest['version'] == version
+              assert manifest['repository']['url'] == 'git+https://github.com/Lunixi-Payment/lunixi-node.git'
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          (directory / 'SHA256SUMS').write_text(digest + '  ' + filename + '\n')
+          (directory / 'RELEASE.json').write_text(json.dumps({'name': '@lunixi/node-sdk', 'version': version,
+              'sourceSha': os.environ['SOURCE_SHA'], 'tag': 'v' + version, 'filename': filename, 'sha256': digest}, sort_keys=True) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha256=' + digest + '\n')
+          PY
+          printf '[extend]\nuseDefault = true\n' > "$RUNNER_TEMP/default-gitleaks.toml"
+          gitleaks dir "$RUNNER_TEMP/npm-package-inspection" --config "$RUNNER_TEMP/default-gitleaks.toml" \
+            --gitleaks-ignore-path /dev/null --ignore-gitleaks-allow --redact=100 --no-banner
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-node-sdk-${{ steps.source.outputs.version }}
+          path: package/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'Lunixi-Payment/lunixi-node'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+      EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npm-publish-user.npmrc
+      NPM_CONFIG_GLOBALCONFIG: ${{ github.workspace }}/.npm-publish-global.npmrc
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+      NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+      NPM_TOKEN: ''
+      NODE_AUTH_TOKEN: ''
+    steps:
+      # Deliberately no checkout, install of package dependencies or package execution.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-node-sdk-${{ needs.build.outputs.version }}
+          path: package
+      - name: Independently verify the same tarball and source identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, tarfile
+          version = os.environ['VERSION']
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
+          assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-node'
+          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_SHA'])
+          assert os.environ['GITHUB_SHA'] == os.environ['SOURCE_SHA']
+          directory = pathlib.Path('package')
+          filename = 'lunixi-node-sdk-' + version + '.tgz'
+          assert sorted(p.name for p in directory.iterdir()) == ['RELEASE.json', 'SHA256SUMS', filename]
+          archive = directory / filename
+          assert archive.is_file() and not archive.is_symlink() and archive.stat().st_size <= 8 * 1024 * 1024
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert digest == os.environ['EXPECTED_SHA256']
+          assert (directory / 'SHA256SUMS').read_text() == digest + '  ' + filename + '\n'
+          assert json.loads((directory / 'RELEASE.json').read_text()) == {'name': '@lunixi/node-sdk', 'version': version,
+              'sourceSha': os.environ['SOURCE_SHA'], 'tag': 'v' + version, 'filename': filename, 'sha256': digest}
+          with tarfile.open(archive, 'r:gz') as tar:
+              seen = set()
+              members = tar.getmembers()
+              assert len(members) <= 1024 and sum(item.size for item in members) <= 32 * 1024 * 1024
+              for item in members:
+                  path = pathlib.PurePosixPath(item.name)
+                  assert item.isfile() and not path.is_absolute() and '..' not in path.parts and item.name not in seen
+                  assert path.as_posix() == item.name and '\\' not in item.name
+                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE'} or item.name.startswith('package/src/')
+                  assert item.size <= 8 * 1024 * 1024 and path.name not in {'.npmrc', '.gitleaks.toml', '.gitleaksignore'}
+                  seen.add(item.name)
+              manifest = json.loads(tar.extractfile('package/package.json').read())
+              assert manifest['name'] == '@lunixi/node-sdk' and manifest['version'] == version
+              assert manifest['repository']['url'] == 'git+https://github.com/Lunixi-Payment/lunixi-node.git'
+          print('Same verified artifact and exact provenance source confirmed.')
+          PY
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+      - name: Install the exact integrity-pinned OIDC-capable npm client
+        run: |
+          set -euo pipefail
+          : > "$NPM_CONFIG_USERCONFIG"
+          : > "$NPM_CONFIG_GLOBALCONFIG"
+          curl --fail --silent --show-error --retry 2 --max-time 60 --proto '=https' \
+            https://registry.npmjs.org/npm/-/npm-12.2.1.tgz --output "$RUNNER_TEMP/npm-12.2.1.tgz"
+          python3 - <<'PY'
+          import base64, hashlib, os, pathlib
+          data = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'npm-12.2.1.tgz').read_bytes()
+          assert base64.b64encode(hashlib.sha512(data).digest()).decode() == 'bKCmFRVT/BB+YPEYbZwQ1XUI3N5t4xKSpU1MxOjo7z3iWzKBJ0ZXRC1xFdEN+TC7N5TdywaBzf2dMXGJq/e2PQ=='
+          PY
+          env -u NPM_TOKEN -u NODE_AUTH_TOKEN npm install --global --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.1.tgz"
+          test "$(npm --version)" = '12.2.1'
+      - name: Publish the verified tarball using OIDC and provenance
+        run: |
+          set -euo pipefail
+          env -u NPM_TOKEN -u NODE_AUTH_TOKEN npm publish "package/lunixi-node-sdk-${VERSION}.tgz" \
+            --registry=https://registry.npmjs.org/ --access=public --provenance --ignore-scripts

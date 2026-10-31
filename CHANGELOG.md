@@ -2,6 +2,12 @@
 
 All notable changes to `@lunixi/node-sdk`.
 
+## 0.20.1
+
+- Add typed checkout responses and CheckoutForm: safe merchant-site embedded page by default, official object/token/mount schema, nonce CSP, EN/TR copy and redacted capability logging.
+- Optional hosted checkout validates and returns only backend paymentPageUrl; legacy missing URLs never reconstruct from the embedded token.
+- Express/Nest checkout adapters require native auth, CSRF, owned server totals and committed durable attempts; uncertain/expired records stay held with the original request/key. Standalone direct API and other product examples remain separate.
+
 ## 0.20.0
 
 Insurance data on a basket item. Additive: no export, method or field was

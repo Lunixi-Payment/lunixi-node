@@ -15,7 +15,7 @@
 
 Server-side Node.js SDK for Lunixi payment integrations. The SDK is framework-agnostic and works with Express, Fastify, NestJS, Hapi, serverless functions, and plain Node.js.
 
-Requires Node.js 18+.
+Requires Node.js 18+. Checkout improvements below are prepared in source 0.20.1; the last verified npm version is 0.20.0 until the new registry release is confirmed.
 
 ## Install
 
@@ -30,13 +30,14 @@ The SDK has no runtime dependencies. TypeScript type definitions are included.
 ```bash
 npm install
 npm test
+python3 tools/check-secret-fixtures.py # optional release guard: Python 3.11+, Gitleaks 8.21+
 ```
 
 The SDK itself has no Express dependency. Express is used only by the sample app:
 
 ```bash
 npm install express
-node samples/express/server.js
+# Import createCheckoutApp from samples/express/server.js into your merchant app.
 ```
 
 ## NestJS usage
@@ -56,66 +57,36 @@ export class MerchantPaymentsService {
 }
 ```
 
-## Express usage
+## Merchant-site checkout (default) and optional redirect
+
+The same Lunixi form mounts on the merchant website by default. Payment methods, alternative methods, multi-card, installments and insurance remain controlled in the Lunixi panel/form; multi-card does not require a redirect.
 
 ```js
-const express = require('express');
-const {
-  LunixiClient,
-  CreateIntentRequest,
-  Buyer,
-  Address,
-  BasketItem,
-} = require('@lunixi/node-sdk');
+const { CheckoutForm } = require('@lunixi/node-sdk');
 
-const lunixi = new LunixiClient({
-  baseUrl: process.env.LUNIXI_BASE_URL,
-  keyId: process.env.LUNIXI_KEY_ID,
-  privateKey: process.env.LUNIXI_PRIVATE_KEY,
-});
-
-const app = express();
-app.use(express.json());
-
-app.post('/checkout', async (req, res, next) => {
-  try {
-    const request = new CreateIntentRequest(10050, 'TRY', `ORD-${Date.now()}`)
-      .withCallbackUrl('https://merchant.example/payment/callback')
-      .withBuyer(new Buyer({
-        name: 'Ada',
-        surname: 'Yilmaz',
-        identityNumber: '11111111111',
-        email: 'ada@example.com',
-        gsmNumber: '+905350000000',
-        city: 'Istanbul',
-        country: 'Turkey',
-        zipCode: '34000',
-        ip: req.ip,
-      }))
-      .withBillingAddress(new Address({
-        address: 'Example Street 1',
-        zipCode: '34000',
-        contactName: 'Ada Yilmaz',
-        city: 'Istanbul',
-        country: 'Turkey',
-      }))
-      .withBasketItems([
-        new BasketItem({
-          id: 'SKU-001',
-          price: 10050,
-          name: 'Demo Product',
-          category1: 'Demo',
-          itemType: BasketItem.TYPE_PHYSICAL,
-        }),
-      ]);
-
-    const intent = await lunixi.payments.createIntent(request, `checkout:${request.toJSON().orderId}`);
-    res.json(intent);
-  } catch (error) {
-    next(error);
-  }
-});
+// Only after native customer/order ownership + CSRF checks and a committed
+// durable attempt with immutable server totals, request and idempotency key:
+const response = await lunixi.payments.createIntent(attempt.request, attempt.key);
+// Atomically bind the same payment to the native attempt and encrypt the entire
+// response (token AND paymentPageUrl) before disclosing either capability.
+const form = new CheckoutForm(response);
+const page = form.embeddedPage('en');
+res.status(page.status).set(page.headers).send(page.body);
+// Optional instead: res.redirect(303, form.hostedUrl());
 ```
+
+`CheckoutForm` preserves the original embedded token and mounts `Lunixi.checkout.create({type:'payment',target:'lunixi-checkout-form',options:{token}})` using the official CDN bundle. It safely escapes token attributes, emits fresh nonce CSP and no-store/no-referrer headers, and supports `en`/`tr`. Extend the merchant's CSP for its reviewed provider/frame/connect needs. It does not parse a token URL or render untrusted backend scripts. Its diagnostic/JSON representation redacts browser capabilities; use the explicit page/URL methods for disclosure.
+
+`hostedUrl()` returns only the exact validated backend `paymentPageUrl`. That URL may contain a different pay-origin token for the same payment. A legacy response without it can embed; redirect fails closed without a guessed URL, new intent or changed key. Retained attempts preserve their original mode/body/hash/key and encrypted capabilities. `paymentId`, not browser status, identifies the pending payment; only authenticated settlement reconciliation can mark paid.
+
+The concrete [Express factory](samples/express/server.js) and [Nest module factory](samples/nestjs/app.module.ts) both use the same mandatory [native adapter](samples/_common/native-checkout.d.ts):
+
+```js
+const { createCheckoutApp } = require('./samples/express/server');
+merchantApp.use('/billing', createCheckoutApp({ lunixi, nativeCheckout }));
+```
+
+`nativeCheckout` is your real authentication/CSRF and durable SQL/order implementation. No fake identity, incoming amount, generated attempt key or in-memory fallback is provided. See [adapter requirements](samples/checkout.md) ([Türkçe](samples/checkout.tr.md)). Standalone direct API examples remain in `samples/02-payments` and are separate from form-only checkout.
 
 ## Amounts
 

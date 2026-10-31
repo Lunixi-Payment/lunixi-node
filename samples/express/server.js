@@ -1,135 +1,30 @@
-'use strict';
+"use strict";
 
 const express = require('express');
-const {
-  LunixiClient,
-  CreateIntentRequest,
-  DirectMethodPaymentRequest,
-  CardDetails,
-  Buyer,
-  Address,
-  BasketItem,
-  WebhookVerifier,
-} = require('../../src');
+const { createNativeCheckout } = require('../_common/native-checkout');
 
-const app = express();
-const lunixi = new LunixiClient({
-  baseUrl: process.env.LUNIXI_BASE_URL || 'http://localhost:3000',
-  keyId: process.env.LUNIXI_KEY_ID || 'kid_demo',
-  privateKey: process.env.LUNIXI_PRIVATE_KEY || LunixiClient.generateKeyPair().privateKey,
-});
-
-app.use('/webhooks/lunixi', express.raw({ type: '*/*' }));
-app.use(express.json());
-
-app.post('/checkout/intents', async (req, res, next) => {
-  try {
-    const orderId = `ORD-NODE-${Date.now()}`;
-    const intent = await lunixi.payments.createIntent(
-      new CreateIntentRequest(10050, 'TRY', orderId)
-        .withCallbackUrl('https://merchant.example/payment/callback')
-        .withBuyer(sampleBuyer(req.ip))
-        .withBillingAddress(sampleBillingAddress())
-        .withBasketItems(sampleBasketItems()),
-      `checkout:${orderId}`,
-    );
-    res.status(201).json(intent);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/payments/card-3d', async (req, res, next) => {
-  try {
-    const orderId = `ORD-CARD-3D-${Date.now()}`;
-    const result = await lunixi.payments.directMethodPayment(
-      new DirectMethodPaymentRequest(10050, 'TRY', orderId)
-        .withCard(new CardDetails({
-          cardHolderName: 'Ada Yilmaz',
-          cardNumber: '5400000000000004',
-          expireMonth: '12',
-          expireYear: '28',
-          cvcNumber: '123',
-        }))
-        .withForce3D(true)
-        .withCallbackUrl('https://merchant.example/payment/callback')
-        .withBuyer(sampleBuyer(req.ip))
-        .withBillingAddress(sampleBillingAddress())
-        .withBasketItems(sampleBasketItems()),
-      `card-3d:${orderId}`,
-    );
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/payments/:id/capture', async (req, res, next) => {
-  try {
-    const result = await lunixi.payments.capture(req.params.id, req.body.amount ?? null, `capture:${req.params.id}`);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/webhooks/lunixi', (req, res, next) => {
-  try {
-    const event = new WebhookVerifier(process.env.LUNIXI_WEBHOOK_SECRET || 'whsec_demo').verify(req.body, req.headers);
-    res.json({ received: true, type: event.type || event.eventType || null });
-  } catch (error) {
-    next(error);
-  }
-});
-
-function sampleBuyer(ip) {
-  return new Buyer({
-    name: 'Ada',
-    surname: 'Yilmaz',
-    identityNumber: '11111111111',
-    email: 'ada@example.com',
-    gsmNumber: '+905350000000',
-    city: 'Istanbul',
-    country: 'Turkey',
-    zipCode: '34000',
-    ip: ip || '127.0.0.1',
+/** Mount into the merchant app with its real auth, CSRF and durable order adapter. */
+function createCheckoutApp({ lunixi, nativeCheckout }) {
+  const checkout = createNativeCheckout(lunixi, nativeCheckout);
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(express.urlencoded({ extended: false, limit: '8kb' }));
+  app.use(express.json({ limit: '8kb' }));
+  app.post('/orders/:orderId/checkout', async (req, res, next) => {
+    try {
+      const page = await checkout(req, req.params.orderId);
+      res.status(page.status).set(page.headers).send(page.body);
+    } catch (error) { next(error); }
   });
+  app.use((error, req, res, next) => {
+    void req; void next;
+    const status = [401, 403, 404, 409].includes(error.statusCode) ? error.statusCode : 409;
+    res.status(status).set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
+      .json({ code: 'checkout_unavailable' });
+  });
+  return app;
 }
 
-function sampleBillingAddress() {
-  return new Address({
-    address: 'Example Street 1',
-    zipCode: '34000',
-    contactName: 'Ada Yilmaz',
-    city: 'Istanbul',
-    country: 'Turkey',
-  });
-}
-
-function sampleBasketItems() {
-  return [
-    new BasketItem({
-      id: 'SKU-001',
-      price: 10050,
-      name: 'Demo Product',
-      category1: 'Demo',
-      itemType: BasketItem.TYPE_PHYSICAL,
-    }),
-  ];
-}
-
-app.use((error, req, res, next) => {
-  void next;
-  res.status(error.statusCode || 500).json({
-    code: error.code || 'internal_error',
-    message: error.message,
-  });
-});
-
-if (require.main === module) {
-  app.listen(process.env.PORT || 3000, () => {
-    console.log(`Express sample listening on http://localhost:${process.env.PORT || 3000}`);
-  });
-}
-
-module.exports = app;
+// No demo credentials, fake customer or implicit in-memory financial store.
+// Standalone direct API examples remain in samples/02-payments.
+module.exports = { createCheckoutApp };

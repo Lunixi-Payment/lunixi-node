@@ -6,6 +6,7 @@ const { Ed25519Signer } = require('./auth/ed25519-signer');
 const { TokenManager, InMemoryTokenStore } = require('./auth/token-manager');
 const { WebhookVerifier } = require('./webhook/webhook-verifier');
 const { PaymentClient } = require('./payment/payment-client');
+const { CheckoutForm, validatePaymentPageUrl } = require('./payment/checkout-form');
 const { PaymentLinkClient } = require('./payment/payment-link-client');
 const paymentLinkValues = require('./payment/payment-link-values');
 const paymentMethodValues = require('./payment/payment-method-values');
@@ -69,6 +70,8 @@ class LunixiClient {
 }
 
 module.exports = {
+  CheckoutForm,
+  validatePaymentPageUrl,
   LunixiClient,
   Configuration,
   ApiClient,

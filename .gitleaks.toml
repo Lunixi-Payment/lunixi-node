@@ -1,0 +1,26 @@
+title = "Lunixi Node: exact reviewed public test-fixture exceptions"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact immutable public v0.20.0 synthetic fixture values in test/fixtures/webhook-v2-vectors.json only"
+condition = "AND"
+regexTarget = "secret"
+paths = ["(^|[/\\\\])test[/\\\\]fixtures[/\\\\]webhook\\-v2\\-vectors\\.json\\z"]
+regexes = [
+  "\\Awhsec_previous_fedcba9876543210aa\\z",
+  "\\Awhsec_testsecret_0123456789abcdef\\z",
+]
+
+[[rules.allowlists]]
+description = "Exact immutable public v0.20.0 synthetic fixture values in test/insurance-client.test.js only"
+condition = "AND"
+regexTarget = "secret"
+paths = ["(^|[/\\\\])test[/\\\\]insurance\\-client\\.test\\.js\\z"]
+regexes = [
+  "\\Ainsurance\\-test\\-key\\-0001\\z",
+]

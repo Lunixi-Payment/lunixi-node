@@ -39,6 +39,29 @@ export interface BinaryResponse {
 
 export type JsonObject = Record<string, unknown>;
 
+/** Actual create-intent payload. Embedded token and hosted URL may use distinct origin-bound sessions. */
+export interface CheckoutIntent extends JsonObject {
+  paymentId: string;
+  token: string;
+  checkoutFormContent?: string;
+  /** Optional exact backend URL. Never rebuild it from token. */
+  paymentPageUrl?: string;
+}
+export interface CheckoutIntentEnvelope extends JsonObject { data: CheckoutIntent; success?: boolean }
+export interface CheckoutPage { status: number; headers: Record<string, string>; body: string }
+/** Browser capability; instantiate only after native ownership/CSRF checks. */
+export class CheckoutForm {
+  constructor(response: CheckoutIntent | CheckoutIntentEnvelope | JsonObject);
+  readonly paymentId: string;
+  readonly token: string;
+  readonly paymentPageUrl: string | undefined;
+  hostedUrl(): string;
+  embeddedPage(locale?: 'en' | 'tr'): CheckoutPage;
+  toJSON(): JsonObject;
+  toString(): string;
+}
+export function validatePaymentPageUrl(value: unknown): string;
+
 export class LunixiClient {
   constructor(options: LunixiClientOptions);
   readonly payments: PaymentClient;
@@ -1339,8 +1362,8 @@ export interface SplitEventLeg {
 }
 
 export class PaymentClient {
-  createIntent(request: CreateIntentRequest | JsonObject, idempotencyKey?: string | null): Promise<JsonObject>;
-  createMarketplaceIntent(request: JsonObject, idempotencyKey?: string | null): Promise<JsonObject>;
+  createIntent(request: CreateIntentRequest | JsonObject, idempotencyKey?: string | null): Promise<CheckoutIntent | CheckoutIntentEnvelope>;
+  createMarketplaceIntent(request: JsonObject, idempotencyKey?: string | null): Promise<CheckoutIntent | CheckoutIntentEnvelope>;
   capture(intentId: string, amount?: number | null, idempotencyKey?: string | null): Promise<JsonObject>;
   refund(intentId: string, amount?: number | null, reason?: string | null, idempotencyKey?: string | null): Promise<JsonObject>;
   void(intentId: string, idempotencyKey?: string | null): Promise<JsonObject>;

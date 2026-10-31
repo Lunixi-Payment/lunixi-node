@@ -1,0 +1,13 @@
+# Yerel Express / NestJS checkout adapteri
+
+Örnekler gerçek framework route/rendering adapterleridir; tam mağaza veya üretim veritabanı değildir. Express uygulamanıza mevcut session middleware sonrasında `createCheckoutApp({lunixi,nativeCheckout})` ekleyin. Nest için `createAppModule(options,nativeCheckout)` kullanın. Framework ayrıca kurulur; SDK çalışma zamanında framework bağımlılığı taşımaz.
+
+[`_common/native-checkout.d.ts`](_common/native-checkout.d.ts) içindeki tüm metotlar zorunludur. `authenticate` gerçek müşteri oturumunu; `verifyCsrf` yerel CSRF/Origin kuralını doğrular. `reserveCheckout` sahipliği, merchant/ortamı, sunucudaki tam sayı tutarı ve fulfillment bloklarını kontrol eder; özgün gövde/anahtar/zaman/mod ile tek SQL rezervasyonunu ağ isteğinden önce commit eder. `bindCheckoutResponse` aynı deneme/ödeme bağını atomik kontrol eder ve token ile paymentPageUrl dahil yanıtı bağımsız sunucu anahtarıyla şifreler. `markCheckoutUncertain` belirsiz sonucu kalıcı incelemeye alır; özgün gövde/anahtar/bağlam/geçmiş korunur. Bellek içi veya sahte kimlik varsayılanı yoktur.
+
+Yeni deneme `embedded` açılır; açıkça saklanmış `redirect` tercihi korunur. Yeni isteğin metadata.allowedOrigin değeri yapılandırılmış HTTPS mağaza origin’idir; tarayıcı/Host alanından türetilmez. Kalıcı özgün anahtar 16–128 ASCII karakterdir. Route yalnız sipariş konumunu kullanır; tarayıcı tutarı/kartı/durumu/modu kabul etmez. Önbellekte token 840 saniye, teyitsiz create 23 saat sonrasında kapalıdır; süre dolması yeni ödeme yetkisi vermez.
+
+Gömülü form özgün token ile resmî Lunixi SDK’sını mağaza sayfasında mount eder. Yönlendirme yalnız doğrulanmış backend paymentPageUrl ile yapılır; gömülü token’dan /payment adresi üretilmez. Eski kayıtta adres yoksa yönlendirme kapalı kalır; yeni anahtar/intent açılmaz. Token/URL loglanmaz; şifreleme anahtarı DB/web kökü dışında korunur.
+
+Ham imzalı webhook JSON parser öncesinde doğrulanır. Kalıcı olay/ham gövde özeti inbox’ı ve kimlik doğrulamalı GET mutabakatı merchant/ödeme/sipariş/para birimi/taban/ücret/tam tahsilatı eşleştirir. Sipariş/inbox/outbox aynı yerel transaction’da uygulanır; manuel bloklar, kısmi veya belirsiz FAILED sonucu fulfillment açmaz. Tarayıcı POST dönüşü tüm alanları yok sayar ve sınırlı, sabit aynı-site303 GET’e geçer; ödeme kanıtı değildir. Bu iş akışları adapterin dışında uygulamanıza aittir.
+
+Çevrimdışı kontroller sahiplik/CSRF sırası, XSS/CSP, gerçek object/token/mount sözleşmesi, sunucu tutarı, aynı anahtar, belirsiz sonuç ve URL doğrulamasını kapsar; yerel SQL/eşzamanlılık veya canlı merchant kabulü iddiası yoktur.
