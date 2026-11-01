@@ -25,7 +25,7 @@ Requires Node.js 18+. Express and NestJS use this same package.
 npm install @lunixi/node-sdk@1.0.0
 ```
 
-Use this command after 1.0.0 is available on npm. The SDK has no runtime dependencies. TypeScript type definitions are included.
+Install the published [1.0.0 package from npm](https://www.npmjs.com/package/@lunixi/node-sdk/v/1.0.0) with this command. The SDK has no runtime dependencies. TypeScript type definitions are included.
 
 ## Development
 
