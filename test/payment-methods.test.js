@@ -51,7 +51,7 @@ function makeClient(answer = () => [200, { status: 'success', code: 'SUCCESS', d
 }
 
 function mobileBillingRequest() {
-  return new DirectMethodPaymentRequest(5000, 'try', 'ORD-MB-1')
+  return new DirectMethodPaymentRequest('5000', 'try', 'ORD-MB-1')
     .withMethodFields(PaymentMethod.MOBILE_BILLING, null, { gsmNumber: '+905321234567' })
     .withCallbackUrl('https://merchant.example.com/payment/callback');
 }
@@ -89,7 +89,7 @@ test('withMethodFields writes paymentMethod and only the method block', () => {
 
   assert.deepEqual(body, {
     paymentMethod: 'MOBILE_BILLING',
-    amount: 5000,
+    amount: "5000",
     currency: 'TRY',
     orderId: 'ORD-MB-1',
     callbackUrl: 'https://merchant.example.com/payment/callback',
@@ -98,11 +98,11 @@ test('withMethodFields writes paymentMethod and only the method block', () => {
 });
 
 test('providerCode goes into the block; amount is the only amount field', () => {
-  const body = new DirectMethodPaymentRequest(12500, 'TRY', 'ORD-W-1')
+  const body = new DirectMethodPaymentRequest('12500', 'TRY', 'ORD-W-1')
     .withMethodFields(PaymentMethod.WALLET, 'PAYCELL_WALLET', { gsmNumber: '+905321234567' })
     .toJSON();
 
-  assert.equal(body.amount, 12500);
+  assert.equal(body.amount, '12500');
   assert.equal(body.price, undefined);
   assert.equal(body.paidPrice, undefined);
   assert.deepEqual(body.wallet, { providerCode: 'PAYCELL_WALLET', gsmNumber: '+905321234567' });
@@ -110,7 +110,7 @@ test('providerCode goes into the block; amount is the only amount field', () => 
 });
 
 test('an empty block is sent as an object (value prefilled from buyer)', () => {
-  const body = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-MB-2')
+  const body = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-MB-2')
     .withMethodFields(PaymentMethod.MOBILE_BILLING, null)
     .withBuyer(new Buyer({ gsmNumber: '+905321234567' }))
     .toJSON();
@@ -132,7 +132,7 @@ test('withPreauth writes the typed preauth field and nothing into metadata', () 
 });
 
 test('withCard pays by card with the CardDetails fields', () => {
-  const body = new DirectMethodPaymentRequest(15000, 'TRY', 'ORD-C-1')
+  const body = new DirectMethodPaymentRequest('15000', 'TRY', 'ORD-C-1')
     .withCard(card())
     .withForce3D(true)
     .withInstallment(3, 'iq_1')
@@ -147,10 +147,10 @@ test('withCard pays by card with the CardDetails fields', () => {
 
 test('card is chosen with withCard, not withMethodFields', () => {
   assert.throws(
-    () => new DirectMethodPaymentRequest(5000, 'TRY', 'O').withMethodFields(PaymentMethod.CARD, null, {}),
+    () => new DirectMethodPaymentRequest('5000', 'TRY', 'O').withMethodFields(PaymentMethod.CARD, null, {}),
     /withCard/,
   );
-  assert.throws(() => new DirectMethodPaymentRequest(5000, 'TRY', 'O').withCard({}), ConfigurationError);
+  assert.throws(() => new DirectMethodPaymentRequest('5000', 'TRY', 'O').withCard({}), ConfigurationError);
 });
 
 test('card-only fields are refused with another method', () => {
@@ -164,20 +164,20 @@ test('card-only fields are refused with another method', () => {
 });
 
 test('a request without a method cannot be serialized', () => {
-  assert.throws(() => new DirectMethodPaymentRequest(5000, 'TRY', 'O').toJSON(), /withMethodFields|withCard/);
+  assert.throws(() => new DirectMethodPaymentRequest('5000', 'TRY', 'O').toJSON(), /withMethodFields|withCard/);
 });
 
 test('a method the gateway has no block for yet is refused before sending', () => {
   for (const method of [PaymentMethod.BNPL, PaymentMethod.QR_CODE, 'QR', PaymentMethod.BANK_TRANSFER]) {
     assert.throws(
-      () => new DirectMethodPaymentRequest(5000, 'TRY', 'O').withMethodFields(method, null, {}),
+      () => new DirectMethodPaymentRequest('5000', 'TRY', 'O').withMethodFields(method, null, {}),
       /cannot be paid through direct\/payment yet/,
     );
   }
 });
 
 test('method fields are checked for the structure the gateway accepts', () => {
-  const request = () => new DirectMethodPaymentRequest(5000, 'TRY', 'O');
+  const request = () => new DirectMethodPaymentRequest('5000', 'TRY', 'O');
   const bad = [
     { providerCode: 'X' },
     { 'gsm-number': '+90' },
@@ -209,14 +209,14 @@ test('method fields are checked for the structure the gateway accepts', () => {
 });
 
 test('amounts are positive integers in minor units', () => {
-  for (const amount of [0, -1, 50.5, '5000', null]) {
+  for (const amount of [0, -1, 50.5, 5000, null]) {
     assert.throws(() => new DirectMethodPaymentRequest(amount, 'TRY', 'O'), ConfigurationError);
   }
-  assert.throws(() => new DirectMethodPaymentRequest(5000, 'TRY', ''), ConfigurationError);
+  assert.throws(() => new DirectMethodPaymentRequest('5000', 'TRY', ''), ConfigurationError);
 });
 
 test('every key the builder can emit is a DirectMethodPaymentDto field', () => {
-  const full = new DirectMethodPaymentRequest(15000, 'TRY', 'ORD-ALL')
+  const full = new DirectMethodPaymentRequest('15000', 'TRY', 'ORD-ALL')
     .withCard(card())
     .withInstallment(2, 'iq')
     .withForce3D(true)
@@ -230,10 +230,10 @@ test('every key the builder can emit is a DirectMethodPaymentDto field', () => {
     .withBuyer(new Buyer({ name: 'Ada' }))
     .withBillingAddress(new Address({ city: 'Istanbul' }))
     .withShippingAddress(new Address({ city: 'Istanbul' }))
-    .withBasketItems([new BasketItem({ id: 'i1', price: 15000 })])
+    .withBasketItems([new BasketItem({ id: 'i1', price: "15000" })])
     .withMetadata({ k: 'v' })
     .toJSON();
-  const wallet = new DirectMethodPaymentRequest(1, 'TRY', 'O').withMethodFields(PaymentMethod.WALLET, 'P', {}).toJSON();
+  const wallet = new DirectMethodPaymentRequest('1', 'TRY', 'O').withMethodFields(PaymentMethod.WALLET, 'P', {}).toJSON();
 
   for (const key of [...Object.keys(full), ...Object.keys(wallet), ...Object.keys(mobileBillingRequest().toJSON())]) {
     assert.ok(DIRECT_METHOD_PAYMENT_FIELDS.includes(key), key);
@@ -270,7 +270,7 @@ test('directMethodPayment refuses to send without an Idempotency-Key', async () 
 
 test('a raw body is checked against the DTO before sending', async () => {
   const { client, calls } = makeClient();
-  const base = { paymentMethod: 'MOBILE_BILLING', amount: 5000, currency: 'TRY', orderId: 'O', mobileBilling: {} };
+  const base = { paymentMethod: 'MOBILE_BILLING', amount: "5000", currency: 'TRY', orderId: 'O', mobileBilling: {} };
 
   const bad = [
     { ...base, autoCapture: false },
@@ -281,8 +281,8 @@ test('a raw body is checked against the DTO before sending', async () => {
     { ...base, card: { cardNumber: '4111' } },
     { ...base, preauth: 'false' },
     { ...base, amount: undefined },
-    { ...base, price: 5000 },
-    { ...base, paidPrice: 5000 },
+    { ...base, price: "5000" },
+    { ...base, paidPrice: "5000" },
     { ...base, paidPrice: null },
     { ...base, paymentMethod: 'mobile billing' },
     { ...base, paymentMethod: 'CARD', mobileBilling: undefined },
@@ -448,8 +448,8 @@ test('listPaymentMethods is a signed GET /payments/methods', async () => {
     providerSelection: 'OPTIONAL',
     actionTypes: ['OTP'],
     currencies: ['TRY'],
-    minAmount: 100,
-    maxAmount: 50000,
+    minAmount: "100",
+    maxAmount: "50000",
     preauth: false,
     providers: [{
       providerCode: 'PAYCELL_MOBILE_BILLING',
@@ -457,8 +457,8 @@ test('listPaymentMethods is a signed GET /payments/methods', async () => {
       logoUrl: null,
       actionTypes: ['OTP'],
       currencies: ['TRY'],
-      minAmount: 100,
-      maxAmount: 50000,
+      minAmount: "100",
+      maxAmount: "50000",
       preauth: false,
       inputFields: [{
         key: 'gsmNumber', type: 'PHONE', required: true, label: { tr: 'Hat', en: 'Line' },
@@ -544,10 +544,10 @@ test('ProviderSelectionMode carries BUYER and PLATFORM, and ProviderSelection is
 });
 
 test('a PLATFORM method is paid without providerCode; a BUYER method with the chosen one', () => {
-  const platform = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-P-1')
+  const platform = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-P-1')
     .withMethodFields(PaymentMethod.MOBILE_BILLING, null, { gsmNumber: '+905321234567' })
     .toJSON();
-  const buyer = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-B-1')
+  const buyer = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-B-1')
     .withMethodFields(PaymentMethod.WALLET, 'WALLET_BRAND_B', {})
     .toJSON();
 
@@ -584,7 +584,7 @@ test('the listed inputFields build the method block', () => {
   const provider = { providerCode: 'PAYCELL_MOBILE_BILLING', inputFields: [{ key: 'gsmNumber', type: 'PHONE' }] };
   const fields = Object.fromEntries(provider.inputFields.map((field) => [field.key, '+905321234567']));
 
-  const body = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-L-1')
+  const body = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-L-1')
     .withMethodFields('MOBILE_BILLING', provider.providerCode, fields)
     .toJSON();
 
@@ -609,11 +609,11 @@ test('the direct 2D/3D card methods and DirectPaymentRequest are removed', () =>
 
 test('a card goes to direct/payment as paymentMethod CARD, with force3D only when asked', async () => {
   const { client, calls } = makeClient();
-  const base = () => new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-D-1')
+  const base = () => new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-D-1')
     .withCard(card())
     .withBuyer(new Buyer({ name: 'Ada' }))
     .withBillingAddress(new Address({ city: 'Istanbul' }))
-    .withBasketItems([new BasketItem({ id: 'i1', price: 10050 })]);
+    .withBasketItems([new BasketItem({ id: 'i1', price: "10050" })]);
 
   await client.payments.directMethodPayment(base(), 'k-card');
   await client.payments.directMethodPayment(base().withForce3D(true), 'k-card-3d');
@@ -626,7 +626,7 @@ test('a card goes to direct/payment as paymentMethod CARD, with force3D only whe
   for (const body of [plain, secure]) {
     assert.equal(body.paymentMethod, 'CARD');
     assert.equal(body.card.cardNumber, '5400000000000004');
-    assert.equal(body.amount, 10050);
+    assert.equal(body.amount, '10050');
   }
   assert.equal(Object.prototype.hasOwnProperty.call(plain, 'force3D'), false);
   assert.equal(secure.force3D, true);
@@ -634,7 +634,7 @@ test('a card goes to direct/payment as paymentMethod CARD, with force3D only whe
 
 test('a stored card is charged through direct/payment with cardUserKey + cardToken', async () => {
   const { client, calls } = makeClient();
-  const request = new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-S-1')
+  const request = new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-S-1')
     .withCard(new CardDetails({ cardUserKey: 'cust_1', cardToken: 'ct_1', cvcNumber: '123' }));
 
   await client.payments.directMethodPayment(request, 'k-stored');

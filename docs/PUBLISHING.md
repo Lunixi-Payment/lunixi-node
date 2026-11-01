@@ -44,10 +44,9 @@ configure it only when the reviewed release is ready.
    `ci.yml` **push CI on that exact commit**. This workflow does not rerun the
    functional suite or accept successful CI from another revision.
 2. On **Actions → Publish npm with Trusted Publishing → Run workflow**, choose
-   the exact `v<version>` tag and enter the numeric package version. For the
-   existing **0.20.1** release, select **`npm-publish-v0.20.1`**: it contains only
-   the corrected publishing workflow, while the original `v0.20.1` remains
-   unchanged. This publication tag must descend from that original release and
+   the exact `v1.0.0` tag and enter `1.0.0` as the package version. If a later
+   publication-only workflow correction is required, its `npm-publish-v<version>`
+   tag must descend from the original immutable release and
    the complete comparison may modify only `.github/workflows/publish-npm.yml`;
    SDK, dependency, README and other changes are rejected. Its exact commit
    must also have successful push CI. Never dispatch from `main`: provenance

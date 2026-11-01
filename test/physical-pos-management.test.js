@@ -1,0 +1,280 @@
+'use strict';
+
+/*
+ * Contract source: nest-payment-gateway apps/api-gateway/src/physical-pos/
+ * (stores/*, terminals/*, devices/*, catalog/*, overview/* — API controllers, DTOs, mappers).
+ * Ids and values below are synthetic.
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  LunixiClient,
+  PhysicalPosManagementClient,
+  PhysicalPosCardDataRejectedError,
+  PhysicalPosOutcomeUnknownError,
+  ConfigurationError,
+  ApiError,
+} = require('../src');
+
+const BASE_URL = 'https://gw.example.com';
+const TOKEN_PATH = '/api/v1/auth/token';
+const STORE_ID = '11111111-1111-4111-8111-111111111111';
+const REGISTER_ID = '22222222-2222-4222-8222-222222222222';
+const TERMINAL_ID = '33333333-3333-4333-8333-333333333333';
+const ROW_ID = '44444444-4444-4444-8444-444444444444';
+const DEVICE_ID = '55555555-5555-4555-8555-555555555555';
+const KEY = 'pos-mgmt-key-0001';
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function jsonResponse(status, body, headers = {}) {
+  return { ok: status >= 200 && status < 300, status, headers: new Map(Object.entries(headers)), text: async () => JSON.stringify(body) };
+}
+
+function envelope(data, extra = {}) {
+  return { status: 'success', code: 'SUCCESS', data, statusCode: 200, requestId: 'req_1', ...extra };
+}
+
+function makeClient(responder) {
+  const keys = LunixiClient.generateKeyPair();
+  const calls = [];
+  const fetch = async (url, init = {}) => {
+    const call = { url: String(url), ...init };
+    if (call.url === BASE_URL + TOKEN_PATH) return jsonResponse(200, { access_token: 'at_test_1', expires_in: 1800 });
+    calls.push(call);
+    return responder(call);
+  };
+  const client = new LunixiClient({ baseUrl: BASE_URL, keyId: 'mk_live_sk_kid_1', privateKey: keys.privateKey, fetch, maxRetries: 0 });
+  return { mgmt: client.physicalPosManagement, calls };
+}
+
+const target = (call) => call.url.slice(BASE_URL.length).split('?')[0];
+const queryOf = (call) => Object.fromEntries(new URL(call.url).searchParams.entries());
+const bodyOf = (call) => (call.body === null || call.body === undefined ? null : JSON.parse(call.body));
+
+const store = (overrides = {}) => ({
+  id: STORE_ID, code: 'IST-01', name: 'Istanbul 1', city: null, district: null, addressLine: null, timezone: 'Europe/Istanbul',
+  storeStatus: 'ACTIVE', externalRef: null, rowVersion: 1, createdAt: '2026-11-01T09:00:00.000Z', updatedAt: '2026-11-01T09:00:00.000Z',
+  ...overrides,
+});
+
+const device = (overrides = {}) => ({ id: DEVICE_ID, serialNumber: 'PAV00012345', lifecycleStatus: 'ACTIVE', rowVersion: 3, ...overrides });
+
+test('client is exposed and leaves the device identity routes out', () => {
+  const { mgmt } = makeClient(() => jsonResponse(200, envelope({})));
+  assert.ok(mgmt instanceof PhysicalPosManagementClient);
+  for (const name of ['issueActivationCode', 'revokeActivationCode', 'listDeviceKeys', 'revokeDeviceKey']) assert.equal(mgmt[name], undefined);
+});
+
+test('overview and catalog reads unwrap data; device model filters are checked', async () => {
+  const { mgmt, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path.endsWith('/overview')) return jsonResponse(200, envelope({ overview: { stores: { active: 1, archived: 0 }, transactions: null } }));
+    return jsonResponse(200, envelope([{ code: 'PAVO' }]));
+  });
+  const overview = await mgmt.getOverview();
+  assert.equal(overview.stores.active, 1);
+  assert.deepEqual(await mgmt.listVendors(), [{ code: 'PAVO' }]);
+  await mgmt.listDeviceModels({ vendorCode: 'PAVO', deviceType: 'PHYSICAL', status: 'ACTIVE' });
+  await mgmt.listAcquirers();
+  assert.deepEqual(calls.map(target), [
+    '/api/v1/physical-pos/overview',
+    '/api/v1/physical-pos/catalog/vendors',
+    '/api/v1/physical-pos/catalog/device-models',
+    '/api/v1/physical-pos/catalog/acquirers',
+  ]);
+  assert.deepEqual(queryOf(calls[2]), { vendorCode: 'PAVO', deviceType: 'PHYSICAL', status: 'ACTIVE' });
+  assert.ok(calls.every((call) => call.method === 'GET' && call.headers['X-Signature']));
+  await assert.rejects(mgmt.listDeviceModels({ environment: 'TEST' }), ConfigurationError);
+});
+
+test('createStore generates the required Idempotency-Key and reports 201 / 200', async () => {
+  let replayed = false;
+  const { mgmt, calls } = makeClient(() => jsonResponse(replayed ? 200 : 201, envelope({ store: store(), replayed }, { statusCode: replayed ? 200 : 201 })));
+  const created = await mgmt.createStore({ code: 'IST-01', name: 'Istanbul 1', city: 'Istanbul' });
+  assert.equal(target(calls[0]), '/api/v1/physical-pos/stores');
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(bodyOf(calls[0]), { code: 'IST-01', name: 'Istanbul 1', city: 'Istanbul' });
+  assert.match(calls[0].headers['Idempotency-Key'], UUID_V4);
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.replayed, false);
+  assert.equal(created.store.id, STORE_ID);
+  assert.equal(created.idempotencyKey, calls[0].headers['Idempotency-Key']);
+
+  replayed = true;
+  const again = await mgmt.createStore({ code: 'IST-01', name: 'Istanbul 1', city: 'Istanbul' }, KEY);
+  assert.equal(calls[1].headers['Idempotency-Key'], KEY);
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.replayed, true);
+});
+
+test('updateStore sends null to clear and rowVersion as a JSON integer', async () => {
+  const { mgmt, calls } = makeClient(() => jsonResponse(200, envelope({ store: store({ rowVersion: 2 }) })));
+  const updated = await mgmt.updateStore(STORE_ID, { rowVersion: 1, city: null, name: 'Istanbul Kadıköy' });
+  assert.equal(calls[0].method, 'PATCH');
+  assert.equal(target(calls[0]), `/api/v1/physical-pos/stores/${STORE_ID}`);
+  assert.deepEqual(bodyOf(calls[0]), { rowVersion: 1, name: 'Istanbul Kadıköy', city: null });
+  assert.equal(calls[0].headers['Idempotency-Key'], undefined);
+  assert.equal(updated.rowVersion, 2);
+  await assert.rejects(mgmt.updateStore(STORE_ID, { rowVersion: '1' }), ConfigurationError);
+  await assert.rejects(mgmt.updateStore(STORE_ID, { rowVersion: 0 }), ConfigurationError);
+  await assert.rejects(mgmt.updateStore(STORE_ID, { rowVersion: 1, code: 'X' }), ConfigurationError);
+  assert.equal(calls.length, 1);
+});
+
+test('store status changes and audit; registers under a store', async () => {
+  const { mgmt, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path.endsWith('/archive') && path.startsWith('/api/v1/physical-pos/stores')) return jsonResponse(200, envelope({ store: store({ storeStatus: 'ARCHIVED' }), archivedRegisterCount: 2 }));
+    if (path.endsWith('/audit')) return jsonResponse(200, envelope({ items: [{ id: 'a1', action: 'physical_pos.audit.store_created' }] }, { pageInfo: { hasMore: false, nextCursor: null, totalCount: null } }));
+    if (path.endsWith('/registers') && call.method === 'GET') return jsonResponse(200, envelope({ items: [] }, { pageInfo: { hasMore: false, nextCursor: null, totalCount: 0 } }));
+    if (path.endsWith('/registers')) return jsonResponse(201, envelope({ register: { id: REGISTER_ID }, replayed: false }, { statusCode: 201 }));
+    return jsonResponse(200, envelope({ register: { id: REGISTER_ID, registerStatus: 'ARCHIVED' }, store: store() }));
+  });
+  const archived = await mgmt.archiveStore(STORE_ID, { rowVersion: 1, reasonCode: 'STORE_CLOSED' });
+  assert.equal(archived.archivedRegisterCount, 2);
+  assert.deepEqual(bodyOf(calls[0]), { rowVersion: 1, reasonCode: 'STORE_CLOSED' });
+  assert.equal((await mgmt.restoreStore(STORE_ID, { rowVersion: 2, reasonCode: 'REOPENED' })).id, STORE_ID);
+  assert.equal(target(calls[1]), `/api/v1/physical-pos/stores/${STORE_ID}/restore`);
+  const audit = await mgmt.listStoreAudit(STORE_ID, { limit: 10 });
+  assert.equal(audit.items.length, 1);
+  await assert.rejects(mgmt.listStoreAudit(STORE_ID, { includeTotal: true }), ConfigurationError);
+
+  const registers = await mgmt.listRegisters(STORE_ID, { includeTotal: true, status: 'ACTIVE' });
+  assert.deepEqual(queryOf(calls[3]), { includeTotal: 'true', status: 'ACTIVE' });
+  assert.equal(registers.totalCount, 0);
+  const register = await mgmt.createRegister(STORE_ID, { code: 'K1', name: 'Till 1' });
+  assert.equal(register.statusCode, 201);
+  assert.match(calls[4].headers['Idempotency-Key'], UUID_V4);
+  await mgmt.updateRegister(REGISTER_ID, { rowVersion: 1, name: 'Till one' });
+  assert.equal(target(calls[5]), `/api/v1/physical-pos/registers/${REGISTER_ID}`);
+  await mgmt.archiveRegister(REGISTER_ID, { rowVersion: 2, reasonCode: 'REGISTER_REMOVED' });
+  await mgmt.restoreRegister(REGISTER_ID, { rowVersion: 3, reasonCode: 'REOPENED' });
+  await mgmt.listRegisterAudit(REGISTER_ID);
+  assert.deepEqual(calls.slice(6).map(target), [
+    `/api/v1/physical-pos/registers/${REGISTER_ID}/archive`,
+    `/api/v1/physical-pos/registers/${REGISTER_ID}/restore`,
+    `/api/v1/physical-pos/registers/${REGISTER_ID}/audit`,
+  ]);
+  await assert.rejects(mgmt.archiveStore(STORE_ID, { rowVersion: 1 }), ConfigurationError);
+});
+
+test('terminals, bank rows and device links', async () => {
+  const { mgmt, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path.endsWith('/acquirers') && call.method === 'POST') return jsonResponse(201, envelope({ acquirer: { id: ROW_ID }, replayed: false }, { statusCode: 201 }));
+    if (path.endsWith('/device-link/close')) return jsonResponse(200, envelope({ terminal: { id: TERMINAL_ID }, link: null }));
+    if (path.endsWith('/device-link')) return jsonResponse(200, envelope({ terminal: { id: TERMINAL_ID }, link: { id: 'l1', deviceId: DEVICE_ID } }));
+    if (call.method === 'GET' && path === `/api/v1/physical-pos/terminals/${TERMINAL_ID}`) return jsonResponse(200, envelope({ terminal: { id: TERMINAL_ID }, acquirers: { items: [], pageInfo: { hasMore: false, nextCursor: null, totalCount: null } } }));
+    if (call.method === 'GET') return jsonResponse(200, envelope({ items: [] }, { pageInfo: { hasMore: false, nextCursor: null } }));
+    if (path === '/api/v1/physical-pos/terminals') return jsonResponse(201, envelope({ terminal: { id: TERMINAL_ID }, replayed: false }, { statusCode: 201 }));
+    return jsonResponse(200, envelope({ terminal: { id: TERMINAL_ID }, acquirer: { id: ROW_ID } }));
+  });
+  await mgmt.listTerminals({ status: 'ACTIVE', q: 'T-', includeTotal: false });
+  assert.deepEqual(queryOf(calls[0]), { status: 'ACTIVE', q: 'T-', includeTotal: 'false' });
+  const created = await mgmt.createTerminal({ code: 'T-01', displayName: 'Till terminal', vendorCode: 'PAVO' }, KEY);
+  assert.equal(created.idempotencyKey, KEY);
+  assert.equal(created.terminal.id, TERMINAL_ID);
+  const detail = await mgmt.getTerminal(TERMINAL_ID);
+  assert.equal(detail.terminal.id, TERMINAL_ID);
+  assert.ok(Array.isArray(detail.acquirers.items));
+  await mgmt.updateTerminal(TERMINAL_ID, { rowVersion: 1, displayName: 'Front till' });
+  await mgmt.closeTerminal(TERMINAL_ID, { rowVersion: 2, reasonCode: 'OTHER' });
+
+  const row = await mgmt.addTerminalAcquirer(TERMINAL_ID, {
+    vendorAcquirerRef: '62', merchantNumber: '000123', terminalNumber: 'T0001', currencies: ['TRY'],
+  });
+  assert.equal(row.acquirer.id, ROW_ID);
+  assert.match(row.idempotencyKey, UUID_V4);
+  await assert.rejects(mgmt.addTerminalAcquirer(TERMINAL_ID, { vendorAcquirerRef: '62', merchantNumber: '1', terminalNumber: '2', currencies: 'TRY' }), ConfigurationError);
+  await mgmt.updateTerminalAcquirer(ROW_ID, { rowVersion: 1, label: null, status: 'DISABLED' });
+  assert.equal(target(calls[6]), `/api/v1/physical-pos/terminal-acquirers/${ROW_ID}`);
+  assert.deepEqual(bodyOf(calls[6]), { rowVersion: 1, label: null, status: 'DISABLED' });
+  await mgmt.listTerminalAcquirers(TERMINAL_ID, { includeTotal: true });
+
+  const linked = await mgmt.changeTerminalDevice(TERMINAL_ID, { rowVersion: 3, deviceId: DEVICE_ID, reasonCode: 'DEVICE_REPLACEMENT' });
+  assert.equal(linked.link.deviceId, DEVICE_ID);
+  assert.equal(calls[8].headers['Idempotency-Key'], undefined);
+  const closed = await mgmt.closeTerminalDeviceLink(TERMINAL_ID, { rowVersion: 4, reasonCode: 'DEVICE_FAULT' });
+  assert.equal(closed.link, null);
+  assert.match(calls[9].headers['Idempotency-Key'], UUID_V4);
+  assert.equal(closed.statusCode, 200);
+  assert.equal('replayed' in closed, false);
+  await mgmt.listTerminalLinks(TERMINAL_ID);
+  await mgmt.listTerminalAudit(TERMINAL_ID, { limit: 5 });
+  assert.deepEqual(calls.slice(10).map(target), [
+    `/api/v1/physical-pos/terminals/${TERMINAL_ID}/links`,
+    `/api/v1/physical-pos/terminals/${TERMINAL_ID}/audit`,
+  ]);
+});
+
+test('devices: create, read, update, assignment, lifecycle and retirement', async () => {
+  const { mgmt, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path === '/api/v1/physical-pos/devices' && call.method === 'POST') return jsonResponse(201, envelope({ device: device(), replayed: false }, { statusCode: 201 }));
+    if (path.endsWith('/assignment/close')) return jsonResponse(200, envelope({ device: device(), closedAssignment: { id: 'as1' }, replayed: false }));
+    if (path.endsWith('/assignment')) return jsonResponse(200, envelope({ device: device(), assignment: { id: 'as2' }, previousAssignmentId: null }));
+    if (path.endsWith('/retire')) return jsonResponse(200, envelope({ device: device({ lifecycleStatus: 'RETIRED' }), replayed: true }));
+    if (call.method === 'GET' && (path.endsWith('/assignments') || path.endsWith('/audit') || path.endsWith('/devices'))) {
+      return jsonResponse(200, envelope({ items: [device()] }, { pageInfo: { hasMore: false, nextCursor: null, totalCount: 1 } }));
+    }
+    return jsonResponse(200, envelope({ device: device() }));
+  });
+  const page = await mgmt.listDevices({ storeId: STORE_ID, lifecycleStatus: 'ACTIVE', q: 'PAV', includeTotal: true, limit: 25 });
+  assert.deepEqual(queryOf(calls[0]), { limit: '25', includeTotal: 'true', storeId: STORE_ID, lifecycleStatus: 'ACTIVE', q: 'PAV' });
+  assert.equal(page.totalCount, 1);
+  const created = await mgmt.createDevice({
+    vendorCode: 'PAVO', deviceModelId: 'm1', serialNumber: 'PAV00012345', integrationChannel: 'APP2APP', storeId: STORE_ID,
+  });
+  assert.equal(created.statusCode, 201);
+  assert.match(calls[1].headers['Idempotency-Key'], UUID_V4);
+  await assert.rejects(mgmt.createDevice({ vendorCode: 'PAVO', deviceModelId: 'm1', serialNumber: 'S' }), ConfigurationError);
+
+  assert.equal((await mgmt.getDevice(DEVICE_ID)).id, DEVICE_ID);
+  await mgmt.updateDevice(DEVICE_ID, { rowVersion: 3, displayName: null, appMode: 'CASHIER' });
+  assert.deepEqual(bodyOf(calls[3]), { rowVersion: 3, displayName: null, appMode: 'CASHIER' });
+
+  const assigned = await mgmt.assignDevice(DEVICE_ID, { rowVersion: 4, storeId: STORE_ID, registerId: null, reasonCode: 'INITIAL_SETUP' });
+  assert.equal(assigned.assignment.id, 'as2');
+  assert.deepEqual(bodyOf(calls[4]), { rowVersion: 4, storeId: STORE_ID, registerId: null, reasonCode: 'INITIAL_SETUP' });
+  const storage = await mgmt.closeDeviceAssignment(DEVICE_ID, { rowVersion: 5, reasonCode: 'MOVED_TO_STORAGE' }, KEY);
+  assert.equal(storage.closedAssignment.id, 'as1');
+  assert.equal(calls[5].headers['Idempotency-Key'], KEY);
+  await mgmt.changeDeviceLifecycle(DEVICE_ID, { rowVersion: 6, target: 'SUSPENDED', reasonCode: 'DEVICE_LOST' });
+  assert.equal(target(calls[6]), `/api/v1/physical-pos/devices/${DEVICE_ID}/lifecycle`);
+  const retired = await mgmt.retireDevice(DEVICE_ID, { rowVersion: 7, reasonCode: 'END_OF_LIFE' });
+  assert.equal(retired.replayed, true);
+  assert.equal(retired.device.lifecycleStatus, 'RETIRED');
+  assert.match(calls[7].headers['Idempotency-Key'], UUID_V4);
+  await mgmt.listDeviceAssignments(DEVICE_ID);
+  await mgmt.listDeviceAudit(DEVICE_ID);
+  assert.deepEqual(calls.slice(8).map(target), [
+    `/api/v1/physical-pos/devices/${DEVICE_ID}/assignments`,
+    `/api/v1/physical-pos/devices/${DEVICE_ID}/audit`,
+  ]);
+});
+
+test('iterateStores follows nextCursor', async () => {
+  const { mgmt, calls } = makeClient((call) => (new URL(call.url).searchParams.get('cursor')
+    ? jsonResponse(200, envelope({ items: [store({ id: 'b' })] }, { pageInfo: { hasMore: false, nextCursor: null } }))
+    : jsonResponse(200, envelope({ items: [store({ id: 'a' })] }, { pageInfo: { hasMore: true, nextCursor: 'n1' } }))));
+  const ids = [];
+  for await (const row of mgmt.iterateStores({ status: 'ACTIVE' })) ids.push(row.id);
+  assert.deepEqual(ids, ['a', 'b']);
+  assert.deepEqual(queryOf(calls[1]), { cursor: 'n1', status: 'ACTIVE' });
+});
+
+test('card-like keys, unknown filters and bad keys are refused; management 5xx is not an outcome-unknown error', async () => {
+  const { mgmt, calls } = makeClient(() => jsonResponse(503, { status: 'failure', code: 'physical_pos.service.busy', statusCode: 503 }));
+  await assert.rejects(mgmt.createStore({ code: 'A', name: 'B', cardNumber: '1' }), PhysicalPosCardDataRejectedError);
+  await assert.rejects(mgmt.listDevices({ serial: 'x' }), ConfigurationError);
+  await assert.rejects(mgmt.createStore({ code: 'A', name: 'B' }, 'bad key'), ConfigurationError);
+  await assert.rejects(mgmt.getStore(''), ConfigurationError);
+  assert.equal(calls.length, 0);
+  await assert.rejects(mgmt.createStore({ code: 'A', name: 'B' }, KEY), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.ok(!(error instanceof PhysicalPosOutcomeUnknownError));
+    assert.equal(error.statusCode, 503);
+    return true;
+  });
+});

@@ -14,8 +14,8 @@ const intent = () => ({ paymentId: 'pi-1', token: 'merchant-only-token',
 test('actual create response keeps both capabilities, with hosted URL exact and no token fallback', async () => {
   const response = { success: true, data: intent() };
   const payments = new PaymentClient({ request: async () => response });
-  assert.equal(await payments.createIntent({ amount: 1990 }, 'persisted-stable-key'), response);
-  assert.equal(await payments.createMarketplaceIntent({ amount: 1990 }, 'persisted-stable-key'), response);
+  assert.equal(await payments.createIntent({ amount: "1990" }, 'persisted-stable-key'), response);
+  assert.equal(await payments.createMarketplaceIntent({ amount: "1990" }, 'persisted-stable-key'), response);
   const form = new CheckoutForm(response);
   assert.equal(form.token, response.data.token);
   assert.equal(form.hostedUrl(), response.data.paymentPageUrl);
@@ -67,7 +67,7 @@ test('embedded default safely mounts the real object/token SDK contract under no
 
 function adapter() {
   const calls = [];
-  const attempt = { request: { amount: 1990, currency: 'TRY', orderId: 'server-order',
+  const attempt = { request: { amount: "1990", currency: 'TRY', orderId: 'server-order',
     callbackUrl: 'https://shop.example/return', metadata: { allowedOrigin: 'https://shop.example' } },
   key: 'persisted-server-attempt-key', createdAtSeconds: 1000, state: 'reserved' };
   const native = {
@@ -84,12 +84,12 @@ function adapter() {
 test('native auth/CSRF/reservation precede financial I/O, server totals win, repeated default embeds reuse one attempt', async () => {
   const fixture = adapter();
   const checkout = fixture.checkout();
-  const page = await checkout({ body: { amount: 1, card: 'untrusted', mode: 'redirect' } }, 'owned-order');
+  const page = await checkout({ body: { amount: "1", card: 'untrusted', mode: 'redirect' } }, 'owned-order');
   assert.equal(page.status, 200);
   assert.deepEqual(fixture.calls, ['auth', 'csrf', 'reserve', 'create', 'bind']);
   assert.equal((await checkout({}, 'owned-order')).status, 200);
   assert.equal(fixture.calls.filter((value) => value === 'create').length, 1);
-  assert.equal(fixture.attempt.request.amount, 1990);
+  assert.equal(fixture.attempt.request.amount, '1990');
 });
 
 test('missing native adapter, unauthenticated owner and failed CSRF fail before reservation or financial I/O', async () => {

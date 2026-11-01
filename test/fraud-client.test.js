@@ -59,7 +59,7 @@ test('evaluate posts to the decision endpoint and unwraps the envelope', async (
     authModeRequested: fraud.AUTH_MODES.TWO_D,
     transactionRef: 'order-2026-0001',
     subjectId: 'order-2026-0001',
-    payment: { amount: 25000, currency: 'TRY' },
+    payment: { amount: "25000", currency: 'TRY' },
   });
 
   assert.equal(decision.decision, FraudDecisionValue.FORCE_3D);

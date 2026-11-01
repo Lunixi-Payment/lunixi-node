@@ -21,10 +21,10 @@ const { sampleClient, env, requiredEnv, print } = require('../_common/bootstrap'
   if (!provider) throw new Error('No Faturana Yansıt provider can be used in a split payment (form settings: split payments with other methods).');
 
   const orderId = `ORD-SPLIT-${Date.now()}`;
-  const request = new SplitPaymentRequest(10000, 'TRY', requiredEnv('LUNIXI_CARD_USER_KEY'))
+  const request = new SplitPaymentRequest('10000', 'TRY', requiredEnv('LUNIXI_CARD_USER_KEY'))
     .withOrderId(orderId)
-    .addCardLeg(requiredEnv('LUNIXI_STORED_CARD_TOKEN'), 6000)
-    .addMethodLeg(PaymentMethod.MOBILE_BILLING, provider.providerCode, 4000, { gsmNumber: env('LUNIXI_BUYER_GSM', '+905350000000') });
+    .addCardLeg(requiredEnv('LUNIXI_STORED_CARD_TOKEN'), '6000')
+    .addMethodLeg(PaymentMethod.MOBILE_BILLING, provider.providerCode, '4000', { gsmNumber: env('LUNIXI_BUYER_GSM', '+905350000000') });
   const key = `split:${orderId}`;
 
   let response = await client.payments.createSplitPayment(request, key);

@@ -4,5 +4,5 @@ const { sampleClient, requiredEnv, idempotencyKey, print } = require('../_common
 
 (async () => {
   const paymentId = requiredEnv('LUNIXI_PAYMENT_ID');
-  print(await sampleClient().payments.capture(paymentId, null, idempotencyKey('capture')));
+  print(await sampleClient().payments.capture(paymentId, undefined, idempotencyKey('capture')));
 })();

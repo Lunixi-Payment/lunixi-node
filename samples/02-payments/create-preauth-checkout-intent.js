@@ -8,7 +8,7 @@ const { CreateIntentRequest } = require('../../src');
 const { sampleClient, idempotencyKey, sampleBuyer, sampleBillingAddress, sampleBasketItems, print } = require('../_common/bootstrap');
 
 (async () => {
-  const amount = 10050;
+  const amount = "10050";
   const orderId = `ORD-PREAUTH-${Date.now()}`;
   const request = new CreateIntentRequest(amount, 'TRY', orderId)
     .withPreauth(true)

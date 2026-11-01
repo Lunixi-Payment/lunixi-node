@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const { ConfigurationError } = require('../errors');
 const {
   PaymentLinkUsage,
@@ -80,7 +82,7 @@ class BasketItem {
  * Body of `POST /api/v1/payments/intents` (hosted checkout) and of
  * `payments.createMarketplaceIntent()`.
  *
- * `amount` is the only amount field: the basket total in minor units (integer,
+ * `amount` is the only amount field: the basket total in minor units (canonical positive string,
  * at least 1), without any installment fee. With basket items, their `price`
  * values must add up to `amount`. The buyer picks the installment on the hosted
  * form; the system adds the installment fee to the charged amount.
@@ -134,6 +136,7 @@ class CreateIntentRequest {
       }
       assertScheduleMatchesAmount(this.payload.promissoryNote.schedule, this.payload.amount);
     }
+    validateMoneyFields(this.payload);
     return compact(this.payload);
   }
 }
@@ -159,7 +162,7 @@ class CreateIntentRequest {
  *
  * Order fields: buyer, billingAddress, shippingAddress, basketItems,
  * paymentChannel, paymentGroup, description, customerId, metadata. `amount` is the
- * only amount field: the basket total in minor units (integer, at least 1),
+ * only amount field: the basket total in minor units (canonical positive string, at least 1),
  * without any installment fee; basket item `price` values must add up to it.
  */
 class DirectMethodPaymentRequest {
@@ -311,7 +314,7 @@ class DirectMethodPaymentRequest {
 
 class InstallmentOptionsRequest {
   constructor(amount, currency) {
-    this.payload = { amount, currency: normalizeCurrency(currency) };
+    this.payload = { amount: minor(amount), currency: normalizeCurrency(currency) };
   }
 
   withBinOrPan(value) { this.payload.binOrPan = value; return this; }
@@ -319,6 +322,7 @@ class InstallmentOptionsRequest {
   withCardBrand(value) { this.payload.cardBrand = value; return this; }
 
   toJSON() {
+    validateMoneyFields(this.payload);
     return compact(this.payload);
   }
 }
@@ -331,6 +335,7 @@ class StoreCardRequest {
   withCurrency(value) { this.payload.currency = normalizeCurrency(value); return this; }
 
   toJSON() {
+    validateMoneyFields(this.payload);
     return compact(this.payload);
   }
 }
@@ -392,7 +397,7 @@ class PaymentLinkCustomField {
 /**
  * Body of `POST /api/v1/payments/links`.
  *
- * Amounts are integers in the currency's minor unit (kuruş for TRY):
+ * Amounts are canonical strings in the currency's minor unit (kuruş for TRY):
  * `150000` is 1,500.00 TRY. `usage`, `amountMode` and `currency` are fixed at
  * creation. The builder checks types and value sets; the business rules (title
  * length, amount ranges, which fields a mode allows) are enforced by the server,
@@ -444,7 +449,7 @@ class CreatePaymentLinkRequest {
   withMinAmountMinor(value) { this.payload.minAmountMinor = requireMinor(value, 'minAmountMinor'); return this; }
   withMaxAmountMinor(value) { this.payload.maxAmountMinor = requireMinor(value, 'maxAmountMinor'); return this; }
   withSuggestedAmountsMinor(values) {
-    if (!Array.isArray(values)) throw new ConfigurationError('suggestedAmountsMinor must be an array of minor-unit integers.');
+    if (!Array.isArray(values)) throw new ConfigurationError('suggestedAmountsMinor must be an array of canonical minor-unit strings.');
     this.payload.suggestedAmountsMinor = values.map((value) => requireMinor(value, 'suggestedAmountsMinor[]'));
     return this;
   }
@@ -628,15 +633,10 @@ function requireInteger(value, field) {
 }
 
 /** Money is an integer count of minor units. A decimal such as 1500.5 is a unit mix-up, not a price. */
-function requireMinor(value, field) {
-  if (!Number.isSafeInteger(value)) {
-    throw new ConfigurationError(`${field} must be an integer amount in minor units (e.g. 150000 for 1,500.00 TRY); got ${JSON.stringify(value)}.`);
-  }
-  return value;
-}
+function requireMinor(value, field) { return minor(value, field, { positive: false }); }
 
 function requirePositiveMinor(value, field) {
-  if (requireMinor(value, field) < 1) {
+  if (requireMinor(value, field) === '0') {
     throw new ConfigurationError(`${field} must be a positive amount in minor units; got ${JSON.stringify(value)}.`);
   }
   return value;

@@ -10,7 +10,7 @@ const { CardDetails, DirectMethodPaymentRequest } = require('../../src');
 const { sampleClient, idempotencyKey, sampleBuyer, sampleBillingAddress, sampleBasketItems, print } = require('../_common/bootstrap');
 
 (async () => {
-  const amount = 10050;
+  const amount = "10050";
   const request = new DirectMethodPaymentRequest(amount, 'TRY', `ORD-DMP-CARD-${Date.now()}`)
     .withCard(new CardDetails({
       cardHolderName: 'Ada Yilmaz',

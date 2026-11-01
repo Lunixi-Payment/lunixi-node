@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const { ConfigurationError, ValidationError } = require('../errors');
 const { toPlain, requirePreauth, assertNoRemovedAmountFields } = require('./dto');
 const {
@@ -43,6 +45,7 @@ class PaymentClient {
   async createIntent(request, idempotencyKey = null) {
     const body = toPlain(request);
     assertNoRemovedAmountFields(body);
+    validateMoneyFields(body);
     if (body.promissoryNote !== undefined && body.promissoryNote !== null) {
       assertIntentPromissoryNote(body.promissoryNote, body.amount);
     }
@@ -61,23 +64,25 @@ class PaymentClient {
   async createMarketplaceIntent(request, idempotencyKey = null) {
     const body = toPlain(request);
     assertNoRemovedAmountFields(body);
+    validateMoneyFields(body);
     return this.api.request('POST', `${BASE}/marketplace/intents`, body, {
       stepUp: true,
       idempotencyKey,
     });
   }
 
-  async capture(intentId, amount = null, idempotencyKey = null) {
-    const body = amount === null ? { paymentIntentId: intentId } : { paymentIntentId: intentId, amount };
+  async capture(intentId, amount = undefined, idempotencyKey = null) {
+    if (amount !== undefined) minor(amount);
+    const body = amount === undefined ? { paymentIntentId: intentId } : { paymentIntentId: intentId, amount };
     return this.api.request('POST', `${BASE}/${encodeURIComponent(intentId)}/capture`, body, {
       stepUp: true,
       idempotencyKey: requireIdempotencyKey('capture', idempotencyKey),
     });
   }
 
-  async refund(intentId, amount = null, reason = null, idempotencyKey = null) {
+  async refund(intentId, amount = undefined, reason = null, idempotencyKey = null) {
     const body = { paymentIntentId: intentId };
-    if (amount !== null) body.amount = amount;
+    if (amount !== undefined) body.amount = minor(amount);
     if (reason) body.reason = reason;
     return this.api.request('POST', `${BASE}/${encodeURIComponent(intentId)}/refund`, body, {
       stepUp: true,
@@ -306,7 +311,7 @@ class PaymentClient {
       return await this.api.request('POST', `${BASE}/split`, body, { stepUp: true, idempotencyKey: key });
     } catch (error) {
       const running = runningSplitResponse(error);
-      if (running) return running;
+      if (running) { validateMoneyFields(running, { response: true }); return running; }
       throw error;
     }
   }
@@ -402,6 +407,7 @@ function assertDirectMethodPaymentPayload(payload) {
     throw new ConfigurationError('A direct method payment needs a body. Use DirectMethodPaymentRequest to build it.');
   }
   assertNoRemovedAmountFields(payload);
+  validateMoneyFields(payload);
   const unknown = Object.keys(payload).filter((key) => !DIRECT_METHOD_PAYMENT_FIELDS.includes(key));
   if (unknown.length > 0) {
     throw new ConfigurationError(`Unknown direct method payment field(s): ${unknown.join(', ')}.`);

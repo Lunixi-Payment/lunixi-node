@@ -17,10 +17,19 @@ regexes = [
 ]
 
 [[rules.allowlists]]
-description = "Exact immutable public v0.20.0 synthetic fixture values in test/insurance-client.test.js only"
+description = "Exact reviewed synthetic idempotency value in test/insurance-client.test.js only"
 condition = "AND"
 regexTarget = "secret"
 paths = ["(^|[/\\\\])test[/\\\\]insurance\\-client\\.test\\.js\\z"]
 regexes = [
   "\\Ainsurance\\-test\\-key\\-0001\\z",
+]
+
+[[rules.allowlists]]
+description = "Exact synthetic UUID from the shared Physical POS idempotency-key cases only"
+condition = "AND"
+regexTarget = "secret"
+paths = ["(^|[/\\\\])test[/\\\\]fixtures[/\\\\]physical\\-pos\\-parity\\.json\\z"]
+regexes = [
+  "\\A7b0c6a1e\\-2f8d\\-4c55\\-9a51\\-3f0e8d1c2a90\\z",
 ]

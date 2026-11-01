@@ -24,7 +24,7 @@ const { fraud, FraudDecisionValue } = require('../../src');
     transactionRef: 'order-2026-0001',
     subjectType: 'card_payment',
     subjectId: 'order-2026-0001',
-    payment: { amount: 25000, currency: 'TRY', is3D: false },
+    payment: { amount: "25000", currency: 'TRY', is3D: false },
     customer: { email: 'ada@example.com', isNew: true },
   });
 

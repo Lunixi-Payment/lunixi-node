@@ -8,7 +8,7 @@ on:
       version:
         description: Existing tested version without v; select its vVERSION or npm-publish-vVERSION tag above
         required: true
-        default: '0.20.1'
+        default: '1.0.0'
         type: string
 
 permissions:
@@ -155,7 +155,7 @@ jobs:
                   path = pathlib.PurePosixPath(item.name)
                   assert item.isfile() and not path.is_absolute() and '..' not in path.parts and item.name not in seen
                   assert path.as_posix() == item.name and '\\' not in item.name
-                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE'} or item.name.startswith('package/src/')
+                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/MIGRATION-1.0.md', 'package/LICENSE'} or item.name.startswith('package/src/')
                   assert item.size <= 8 * 1024 * 1024 and path.name not in {'.npmrc', '.gitleaks.toml', '.gitleaksignore'}
                   seen.add(item.name)
                   target = extraction.joinpath(*path.parts)
@@ -236,7 +236,7 @@ jobs:
                   path = pathlib.PurePosixPath(item.name)
                   assert item.isfile() and not path.is_absolute() and '..' not in path.parts and item.name not in seen
                   assert path.as_posix() == item.name and '\\' not in item.name
-                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE'} or item.name.startswith('package/src/')
+                  assert item.name in {'package/package.json', 'package/README.md', 'package/CHANGELOG.md', 'package/MIGRATION-1.0.md', 'package/LICENSE'} or item.name.startswith('package/src/')
                   assert item.size <= 8 * 1024 * 1024 and path.name not in {'.npmrc', '.gitleaks.toml', '.gitleaksignore'}
                   seen.add(item.name)
               manifest = json.loads(tar.extractfile('package/package.json').read())

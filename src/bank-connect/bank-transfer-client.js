@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const crypto = require('node:crypto');
 const { ConfigurationError } = require('../errors');
 const {
@@ -54,7 +56,7 @@ class BankTransferClient {
    * Creates an outgoing transfer (HTTP 201): `{ transfer, stepUp, replayed }`.
    *
    * `request`: `accountId` (source account), `receiverIban` (TR IBAN),
-   * `receiverName` (2–140 characters), `amountMinor` (integer > 0, minor
+   * `receiverName` (2–140 characters), `amountMinor` (positive canonical string, minor
    * units: 150075 = 1,500.75 TRY), optional `currency` (TRY), `paymentPurpose`
    * and `description` (at most 140 characters).
    *
@@ -117,7 +119,7 @@ class BankFxClient {
   /**
    * Quotes an exchange (HTTP 201). `request`: `sourceAccountId` (you sell from
    * it), `targetAccountId` (you buy into it) and exactly one of
-   * `sourceAmountMinor` / `targetAmountMinor` (integer > 0, minor units of
+   * `sourceAmountMinor` / `targetAmountMinor` (positive canonical string, minor units of
    * that account's currency). Nothing is booked; a quote is used by one order.
    */
   async createQuote(request) {
@@ -230,9 +232,7 @@ function checkDescription(value) {
 }
 
 function requireAmount(key, value) {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new ConfigurationError(`'${key}' must be a positive integer in minor units (150075 = 1,500.75 TRY).`);
-  }
+  minor(value, key);
   return value;
 }
 

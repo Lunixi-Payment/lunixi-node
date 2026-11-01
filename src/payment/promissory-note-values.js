@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 /**
  * Senetle Ödeme (promissory-note payment, `paymentMethod: PROMISSORY_NOTE`):
  * value sets and the plan rules the SDK checks before sending.
@@ -93,7 +95,7 @@ function isCalendarDate(value) {
 }
 
 /**
- * A schedule: 1–24 rows `{ amount, dueDate }`, `amount` a positive integer in
+ * A schedule: 1–24 rows `{ amount, dueDate }`, `amount` a positive canonical string in
  * minor units, `dueDate` a `YYYY-MM-DD` calendar date, rows in ascending date
  * order (the same day twice is fine). Returns a copy of the rows.
  */
@@ -114,9 +116,7 @@ function requirePromissoryNoteSchedule(value, path = 'promissoryNote.schedule') 
     if (unknown.length > 0) {
       throw new ConfigurationError(`${rowPath} has unknown field(s): ${unknown.join(', ')}. A row is { amount, dueDate }.`);
     }
-    if (!Number.isSafeInteger(row.amount) || row.amount < 1) {
-      throw new ConfigurationError(`${rowPath}.amount must be a positive integer in minor units (e.g. 100000 for 1,000.00 TRY); got ${JSON.stringify(row.amount)}.`);
-    }
+    minor(row.amount, `${rowPath}.amount`);
     if (typeof row.dueDate !== 'string' || !isCalendarDate(row.dueDate)) {
       throw new ConfigurationError(`${rowPath}.dueDate must be a calendar date in YYYY-MM-DD form; got ${JSON.stringify(row.dueDate)}.`);
     }
@@ -130,8 +130,8 @@ function requirePromissoryNoteSchedule(value, path = 'promissoryNote.schedule') 
 
 /** The rows of a schedule must add up to the payment amount. */
 function assertScheduleMatchesAmount(schedule, amount, path = 'promissoryNote.schedule') {
-  const total = schedule.reduce((sum, row) => sum + row.amount, 0);
-  if (total !== amount) {
+  const total = schedule.reduce((sum, row) => sum + BigInt(row.amount), 0n);
+  if (total !== BigInt(minor(amount))) {
     throw new ConfigurationError(`${path} adds up to ${total}; it must equal amount (${amount}).`);
   }
 }
@@ -174,7 +174,7 @@ function assertPromissoryNotePlan(block, amount, path = 'promissoryNote') {
     return;
   }
   const schedule = requirePromissoryNoteSchedule(block.schedule, `${path}.schedule`);
-  if (Number.isSafeInteger(amount)) assertScheduleMatchesAmount(schedule, amount, `${path}.schedule`);
+  if (amount !== undefined && amount !== null) assertScheduleMatchesAmount(schedule, amount, `${path}.schedule`);
 }
 
 /**
@@ -190,7 +190,7 @@ function assertIntentPromissoryNote(value, amount, path = 'promissoryNote') {
     throw new ConfigurationError(`${path} of an intent carries only schedule; unknown field(s): ${unknown.join(', ')}.`);
   }
   const schedule = requirePromissoryNoteSchedule(value.schedule, `${path}.schedule`);
-  if (Number.isSafeInteger(amount)) assertScheduleMatchesAmount(schedule, amount, `${path}.schedule`);
+  if (amount !== undefined && amount !== null) assertScheduleMatchesAmount(schedule, amount, `${path}.schedule`);
 }
 
 /** Serial numbers to cancel: 1–24 note serial numbers. */

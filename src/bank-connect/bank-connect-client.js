@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const { ConfigurationError } = require('../errors');
 const {
   BankConnectionStatus,
@@ -129,13 +131,13 @@ class BankConnectClient {
    * late with an older bank date. `bookedFrom` (inclusive) / `bookedTo`
    * (exclusive) filter on the bank date: a `Date` or an ISO-8601 string with a
    * time zone, at most 92 days apart; `bookedTo` needs `bookedFrom`
-   * (`bookedFrom` alone runs up to now). Amount filters are inclusive integers
+   * (`bookedFrom` alone runs up to now). Amount filters are inclusive minor-unit strings
    * in minor units.
    */
   async listTransactions(filters = {}) {
     const query = buildQuery(filters, 'listTransactions');
     assertBookedRange(filters);
-    if (query.minAmountMinor !== undefined && query.maxAmountMinor !== undefined && query.minAmountMinor > query.maxAmountMinor) {
+    if (query.minAmountMinor !== undefined && query.maxAmountMinor !== undefined && BigInt(query.minAmountMinor) > BigInt(query.maxAmountMinor)) {
       throw new ConfigurationError("'minAmountMinor' must not be greater than 'maxAmountMinor'.");
     }
     return toPage(await read(this.api, '/transactions', query));
@@ -213,9 +215,7 @@ function filterValue(key, value, route) {
       return isoTime(key, value);
     case 'minAmountMinor':
     case 'maxAmountMinor':
-      if (!Number.isSafeInteger(value) || value < 0) {
-        throw new ConfigurationError(`'${key}' must be a non-negative integer in minor units (12550 = 125.50 TRY).`);
-      }
+      minor(value, key, { positive: false });
       return value;
     default:
       throw new ConfigurationError(`Unknown bank-connect filter '${key}'.`);

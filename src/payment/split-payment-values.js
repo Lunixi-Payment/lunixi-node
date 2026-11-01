@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 /**
  * Split payments (SplitPay): one payment funded by several legs. A leg is a
  * stored card or, when split payments with other methods are enabled in your
@@ -333,12 +335,7 @@ function isCardLeg(leg) {
   return !given(leg.paymentMethod) || leg.paymentMethod === '' || leg.paymentMethod === PaymentMethod.CARD;
 }
 
-function requirePositiveInteger(value, path) {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new ConfigurationError(`${path} must be a positive integer amount in minor units; got ${JSON.stringify(value)}.`);
-  }
-  return value;
-}
+function requirePositiveInteger(value, path) { return minor(value, path); }
 
 function requireBoundedText(value, path, maxLength) {
   if (typeof value !== 'string' || value.trim() === '' || value.length > maxLength) {
@@ -460,13 +457,13 @@ function assertSplitPaymentPayload(body) {
   }
   const providers = new Set();
   const cardTokens = new Set();
-  let sum = 0;
+  let sum = 0n;
   body.legs.forEach((leg, index) => {
     const path = `legs[${index}]`;
     if (!isPlainObject(leg)) throw new ConfigurationError(`${path} must be a plain object.`);
     const unknownLeg = Object.keys(leg).filter((key) => !SPLIT_PAYMENT_LEG_FIELDS.includes(key));
     if (unknownLeg.length > 0) throw new ConfigurationError(`Unknown ${path} field(s): ${unknownLeg.join(', ')}.`);
-    sum += requirePositiveInteger(leg.amount, `${path}.amount`);
+    sum += BigInt(requirePositiveInteger(leg.amount, `${path}.amount`));
     if (isCardLeg(leg)) {
       assertCardLeg(leg, path);
       if (cardTokens.has(leg.cardToken)) throw new ConfigurationError(`${path}: the same card is used in more than one leg.`);
@@ -477,7 +474,7 @@ function assertSplitPaymentPayload(body) {
     if (providers.has(providerCode)) throw new ConfigurationError(`${path}: provider ${providerCode} is used in more than one leg; one leg per provider.`);
     providers.add(providerCode);
   });
-  if (sum !== body.totalAmount) {
+  if (sum !== BigInt(body.totalAmount)) {
     throw new ConfigurationError(`The legs add up to ${sum} but totalAmount is ${body.totalAmount}; they must be equal.`);
   }
   if (body.legs.some((leg) => leg.force3D === true) && !given(body.callbackUrl)) {

@@ -1,6 +1,7 @@
 'use strict';
 
 const { CheckoutForm, ConfigurationError } = require('../../src');
+const { minor } = require('../../src/money');
 
 /** Native adapter is mandatory: no demo identity, memory ledger or browser totals. */
 function createNativeCheckout(lunixi, native, now = () => Math.floor(Date.now() / 1000)) {
@@ -16,7 +17,8 @@ function createNativeCheckout(lunixi, native, now = () => Math.floor(Date.now() 
     // attempt/request/key before returning. Browser amount/card/status ignored.
     const attempt = await native.reserveCheckout(principal, orderId);
     const body = attempt?.request;
-    if (!body || !Number.isSafeInteger(body.amount) || body.amount < 1 || typeof body.orderId !== 'string' || !body.orderId
+    try { minor(body?.amount); } catch (_) { throw denied(409); }
+    if (!body || typeof body.orderId !== 'string' || !body.orderId
       || typeof body.currency !== 'string' || !/^[A-Z]{3}$/.test(body.currency)
       || Object.hasOwn(body, 'price') || Object.hasOwn(body, 'paidPrice') || Object.hasOwn(body, 'card') || Object.hasOwn(body, 'paymentCards')
       || typeof attempt.key !== 'string' || !/^[\x21-\x7e]{16,128}$/.test(attempt.key)

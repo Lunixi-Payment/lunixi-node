@@ -126,7 +126,7 @@ function bodyOf(call) {
 
 const ticketItem = () => new BasketItem({
   id: 'ticket-1',
-  price: 100000,
+  price: "100000",
   name: 'Sample ticket',
   category1: 'ticket',
   itemType: BasketItem.TYPE_VIRTUAL,
@@ -136,7 +136,7 @@ const ticketItem = () => new BasketItem({
 
 const quoteOption = (overrides = {}) => ({
   quoteId: QUOTE_ID, insuranceType: 'TICKET_CANCELLATION', schemaVersion: 1, title: 'Ticket cancellation',
-  premiumAmount: 4900, currency: 'TRY', premiumCollectedBy: 'MERCHANT',
+  premiumAmount: "4900", currency: 'TRY', premiumCollectedBy: 'MERCHANT',
   provider: { code: 'SAMPLE', name: 'Sample', logoUrl: null, connectionId: CONNECTION_ID },
   basketItemIds: ['ticket-1'], coverageSummary: [], terms: { version: 'v1', sha256: 'd'.repeat(64) },
   underwriterName: null, expiresAt: '2026-01-01T07:15:00.000Z', status: 'QUOTED', paymentIntentId: null,
@@ -146,7 +146,7 @@ const quoteOption = (overrides = {}) => ({
 const orderJson = (overrides = {}) => ({
   orderId: ORDER_ID, quoteId: QUOTE_ID, insuranceType: 'TICKET_CANCELLATION', surface: 'MERCHANT_API', status: 'CREATED',
   collectionStatus: 'NOT_STARTED', policyStatus: 'NOT_REQUESTED', refundStatus: 'NONE', documentStatus: 'NOT_AVAILABLE',
-  paymentMode: 'NO_PAYMENT', premiumCollectedBy: 'MERCHANT', premiumAmount: 4900, currency: 'TRY', paymentIntentId: null,
+  paymentMode: 'NO_PAYMENT', premiumCollectedBy: 'MERCHANT', premiumAmount: "4900", currency: 'TRY', paymentIntentId: null,
   merchantOrderId: 'ORD-1', provider: { code: 'SAMPLE', name: 'Sample', logoUrl: null, connectionId: CONNECTION_ID },
   basketItemIds: ['ticket-1'], policies: [], errorCode: null, refundErrorCode: null, refundedAt: null,
   createdAt: '2026-01-01T07:00:00.000Z', updatedAt: '2026-01-01T07:00:00.000Z', ...overrides,
@@ -164,7 +164,7 @@ const leadRequest = () => ({
   policyholder: { identityType: 'TCKN', identityNumber: 'SAMPLE', birthDate: '1990-01-01', email: 'lead@example.com', phone: '+905000000000' },
   company: { identityType: 'VKN', identityNumber: 'SAMPLE' },
   shipment: {
-    cargoDescription: 'Sample goods', carrierVehicle: 'TRUCK', invoiceAmount: 1000000, consigneeName: 'Sample Consignee',
+    cargoDescription: 'Sample goods', carrierVehicle: 'TRUCK', invoiceAmount: "1000000", consigneeName: 'Sample Consignee',
     originCityCode: '35', destinationCityCode: '06', departureDate: '2026-01-02',
   },
   vehicle: { plate: 'SAMPLE', registrationDocument: { serial: 'AA', number: '000000' } },
@@ -189,7 +189,7 @@ test('every insurance call is signed, hits its route and sends the Idempotency-K
   const drain = async (iterator) => { for await (const row of iterator) void row; };
   const quote = { insuranceType: 'TICKET_CANCELLATION', currency: 'TRY', context: { items: [ticketItem()] }, tickets: [{}] };
   const consent = { termsVersion: 'v1', termsSha256: 'd'.repeat(64), acceptedAt: '2026-01-01T07:01:00Z' };
-  const payment = { externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z' };
+  const payment = { externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z' };
   const invocations = {
     listProducts: ['GET /api/v1/insurance/products', null, () => insurance.listProducts({ currency: 'TRY', paymentIntentId: PAYMENT_ID })],
     searchProducts: ['POST /api/v1/insurance/products', null, () => insurance.searchProducts({ currency: 'TRY', context: { items: [ticketItem()] } })],
@@ -239,7 +239,7 @@ test('every insurance call is signed, hits its route and sends the Idempotency-K
 test('the five order writes and the lead refuse a missing or malformed Idempotency-Key before sending', async () => {
   const { insurance, calls } = makeClient(() => jsonResponse(200, envelope(orderJson())));
   const consent = { termsVersion: 'v1', termsSha256: 'd'.repeat(64), acceptedAt: '2026-01-01T07:01:00Z' };
-  const payment = { externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z' };
+  const payment = { externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z' };
   const writes = [
     (key) => insurance.createOrder({ quoteId: QUOTE_ID, consent }, key),
     (key) => insurance.confirmPayment(ORDER_ID, payment, key),
@@ -260,7 +260,7 @@ test('the five order writes and the lead refuse a missing or malformed Idempoten
 
 test('createQuote takes at most one basket source and keeps the type object as given', async () => {
   const { insurance, calls } = makeClient(() => jsonResponse(201, envelope({ insuranceType: 'TICKET_CANCELLATION', schemaVersion: 1, options: [quoteOption()] }, { statusCode: 201 })));
-  const tickets = [{ basketItemId: 'ticket-1', transportMode: 'TRAIN', carrier: 'Sample Rail', priceAmount: 100000 }];
+  const tickets = [{ basketItemId: 'ticket-1', transportMode: 'TRAIN', carrier: 'Sample Rail', priceAmount: "100000" }];
   const insured = [{ identityType: 'PASSPORT', identityNumber: 'SAMPLE', birthDate: '2000-01-01' }];
   const set = await insurance.createQuote({
     insuranceType: 'TICKET_CANCELLATION', currency: 'try', context: { items: [ticketItem()] }, insured, tickets, merchantOrderId: 'ORD-1',
@@ -341,19 +341,19 @@ test('premiumBasketItem is the VIRTUAL premium line of a MERCHANT order and carr
   const item = InsuranceClient.premiumBasketItem(orderJson(), { name: 'Ticket cancellation insurance', category1: 'insurance' });
   assert.ok(item instanceof BasketItem);
   assert.deepEqual(item.toJSON(), {
-    id: ORDER_ID, price: 4900, name: 'Ticket cancellation insurance', category1: 'insurance', itemType: 'VIRTUAL',
+    id: ORDER_ID, price: "4900", name: 'Ticket cancellation insurance', category1: 'insurance', itemType: 'VIRTUAL',
   });
   assert.equal(Object.keys(item.toJSON()).some((key) => key.startsWith('insurance')), false);
   assert.throws(() => InsuranceClient.premiumBasketItem(orderJson({ premiumCollectedBy: 'PROVIDER' }), { name: 'x', category1: 'y' }), /premiumCollectedBy MERCHANT/);
   assert.throws(() => InsuranceClient.premiumBasketItem(orderJson(), { category1: 'insurance' }), /name is required/);
-  assert.throws(() => InsuranceClient.premiumBasketItem(orderJson({ premiumAmount: 0 }), { name: 'x', category1: 'y' }), /premiumAmount/);
+  assert.throws(() => InsuranceClient.premiumBasketItem(orderJson({ premiumAmount: "0" }), { name: 'x', category1: 'y' }), /premiumAmount/);
 });
 
 test('bindPayment, confirmPayment and refundPremium send the DTO bodies', async () => {
   const { insurance, calls } = makeClient(() => jsonResponse(200, envelope(orderJson())));
   await insurance.bindPayment(ORDER_ID, PAYMENT_ID);
   await insurance.confirmPayment(ORDER_ID, {
-    externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'try', paidAt: new Date('2026-01-01T07:02:00.000Z'), paymentProvider: 'Own POS',
+    externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'try', paidAt: new Date('2026-01-01T07:02:00.000Z'), paymentProvider: 'Own POS',
   }, KEY);
   await insurance.refundPremium(ORDER_ID, undefined, KEY);
   await insurance.refundPremium(ORDER_ID, { externalRefund: { externalRefundId: 'refund-1', refundedAt: '2026-01-02T07:00:00+03:00' } }, KEY);
@@ -361,7 +361,7 @@ test('bindPayment, confirmPayment and refundPremium send the DTO bodies', async 
   assert.deepEqual(bodyOf(calls[0]), { paymentIntentId: PAYMENT_ID });
   assert.equal(calls[0].headers['Idempotency-Key'], undefined);
   assert.deepEqual(bodyOf(calls[1]), {
-    payment: { externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00.000Z', paymentProvider: 'Own POS' },
+    payment: { externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00.000Z', paymentProvider: 'Own POS' },
   });
   assert.deepEqual(bodyOf(calls[2]), {}, 'a Lunixi-payment refund has an empty body');
   assert.deepEqual(bodyOf(calls[3]), { externalRefund: { externalRefundId: 'refund-1', refundedAt: '2026-01-02T07:00:00+03:00' } });
@@ -369,8 +369,8 @@ test('bindPayment, confirmPayment and refundPremium send the DTO bodies', async 
 
   const invalid = [
     () => insurance.confirmPayment(ORDER_ID, { externalPaymentId: 'pay-1', paidAmount: 49.5, paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z' }, KEY),
-    () => insurance.confirmPayment(ORDER_ID, { externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'TRY' }, KEY),
-    () => insurance.confirmPayment(ORDER_ID, { externalPaymentId: 'pay-1', paidAmount: 4900, paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z', cardLast4: '0000' }, KEY),
+    () => insurance.confirmPayment(ORDER_ID, { externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'TRY' }, KEY),
+    () => insurance.confirmPayment(ORDER_ID, { externalPaymentId: 'pay-1', paidAmount: "4900", paidCurrency: 'TRY', paidAt: '2026-01-01T07:02:00Z', cardLast4: '0000' }, KEY),
     () => insurance.refundPremium(ORDER_ID, { externalRefund: { externalRefundId: 'refund-1' } }, KEY),
     () => insurance.refundPremium(ORDER_ID, { reason: 'x' }, KEY),
     () => insurance.bindPayment(ORDER_ID, 'not-a-uuid'),
@@ -687,7 +687,7 @@ test('an insurance webhook verifies with WebhookVerifier', () => {
     eventId, eventType: 'insurance.policy.issued', merchantId: 'org_1', insuranceOrderId: ORDER_ID, paymentIntentId: PAYMENT_ID,
     merchantOrderId: 'ORD-1', insuranceType: 'TICKET_CANCELLATION', premiumCollectedBy: 'MERCHANT',
     provider: { code: 'SAMPLE', name: 'Sample', logoUrl: null, connectionId: CONNECTION_ID }, status: 'ACTIVE',
-    collectionStatus: 'COLLECTED', policyStatus: 'ISSUED', refundStatus: 'NONE', documentStatus: 'AVAILABLE', premiumAmount: 4900,
+    collectionStatus: 'COLLECTED', policyStatus: 'ISSUED', refundStatus: 'NONE', documentStatus: 'AVAILABLE', premiumAmount: "4900",
     currency: 'TRY', policies: [{
       policyId: POLICY_ID, basketItemId: 'ticket-1', policyNumber: 'P-1', policyStatus: 'ISSUED', documentStatus: 'AVAILABLE',
       documentUrl: `${BASE_URL}/api/v1/insurance/policies/${POLICY_ID}/document`,

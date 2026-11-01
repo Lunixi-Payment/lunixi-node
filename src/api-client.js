@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateMoneyFields, isFiatRoute, validateOperationAmount } = require('./money');
+
 const crypto = require('node:crypto');
 const {
   ApiError,
@@ -36,15 +38,22 @@ class ApiClient {
    * instead of parsing JSON (image, PDF and CSV endpoints). Errors are still
    * read as JSON. `accept` overrides the `Accept` header (default: images for a
    * binary request, JSON otherwise; it is not signed).
+   *
+   * `retry: false` sends the request once (no retry after a network error or a
+   * 5xx); the caller runs its own attempts. The 401 re-authentication still
+   * happens. Default: retries as configured (`maxRetries`).
    */
   async request(method, path, body = null, options = {}) {
     const upperMethod = method.toUpperCase();
     const signedPath = withQuery(path, options.query);
     const url = this.config.baseUrl + signedPath;
+    validateOperationAmount(path, body);
+    if (isFiatRoute(path)) { validateMoneyFields(body); validateMoneyFields(options.query); }
     const rawBody = body === null || body === undefined ? null : JSON.stringify(body);
     const idempotencyKey = options.idempotencyKey || null;
     const idempotent = upperMethod === 'GET' || upperMethod === 'HEAD' || Boolean(idempotencyKey);
     const accept = options.accept || (options.binary ? BINARY_ACCEPT : JSON_ACCEPT);
+    const maxRetries = options.retry === false ? 0 : this.config.maxRetries;
     let reAuthed = false;
 
     for (let attempt = 1; ; attempt += 1) {
@@ -59,14 +68,19 @@ class ApiClient {
           signal: AbortSignal.timeout(this.config.timeoutMs),
         });
       } catch (error) {
-        if (idempotent && attempt <= this.config.maxRetries) {
+        if (idempotent && attempt <= maxRetries) {
           await backoff(attempt);
           continue;
         }
         throw new ApiError(`Gateway request failed: ${error.message}`, { cause: error });
       }
 
-      if (response.ok) return options.binary ? readBinary(response) : readJson(response);
+      if (response.ok) {
+        if (options.binary) return readBinary(response);
+        const result = await readJson(response);
+        if (isFiatRoute(path)) validateMoneyFields(result, { response: true });
+        return result;
+      }
 
       if (response.status === 401 && !reAuthed) {
         this.tokenManager.invalidate();
@@ -74,7 +88,7 @@ class ApiClient {
         continue;
       }
 
-      if (response.status >= 500 && idempotent && attempt <= this.config.maxRetries) {
+      if (response.status >= 500 && idempotent && attempt <= maxRetries) {
         await backoff(attempt);
         continue;
       }

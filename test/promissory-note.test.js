@@ -29,8 +29,8 @@ const {
 const PAYMENT_ID = '7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
 
 const SCHEDULE = [
-  { amount: 100000, dueDate: '2030-01-15' },
-  { amount: 200000, dueDate: '2030-02-15' },
+  { amount: "100000", dueDate: '2030-01-15' },
+  { amount: "200000", dueDate: '2030-02-15' },
 ];
 
 // Provider-declared debtor fields (from `inputFields` of GET /payments/methods); test values only.
@@ -85,7 +85,7 @@ function makeClient(answer = () => jsonResponse(200, { status: 'success', code: 
 }
 
 function promissoryRequest() {
-  return new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-PN-1')
+  return new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-PN-1')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, DEBTOR)
     .withPromissoryNoteSchedule(SCHEDULE);
 }
@@ -97,10 +97,10 @@ function notesBody(extra = {}) {
     documentType: 'PROMISSORY_NOTE',
     rowSerialNumber: 'ROW-0001',
     currency: 'TRY',
-    totalAmount: 300000,
+    totalAmount: "300000",
     notes: [
-      { serialNumber: 'NOTE-0001', sequence: 1, amount: 100000, dueDate: '2030-01-15', status: 'ISSUED', paidAt: null, protestedAt: null, cancelledAt: null },
-      { serialNumber: 'NOTE-0002', sequence: 2, amount: 200000, dueDate: '2030-02-15', status: 'ISSUED', paidAt: null, protestedAt: null, cancelledAt: null },
+      { serialNumber: 'NOTE-0001', sequence: 1, amount: "100000", dueDate: '2030-01-15', status: 'ISSUED', paidAt: null, protestedAt: null, cancelledAt: null },
+      { serialNumber: 'NOTE-0002', sequence: 2, amount: "200000", dueDate: '2030-02-15', status: 'ISSUED', paidAt: null, protestedAt: null, cancelledAt: null },
     ],
     ...extra,
   };
@@ -134,7 +134,7 @@ test('a schedule goes into the promissoryNote block next to the provider fields'
 
   assert.deepEqual(body, {
     paymentMethod: 'PROMISSORY_NOTE',
-    amount: 300000,
+    amount: "300000",
     currency: 'TRY',
     orderId: 'ORD-PN-1',
     promissoryNote: { ...DEBTOR, schedule: SCHEDULE },
@@ -143,7 +143,7 @@ test('a schedule goes into the promissoryNote block next to the provider fields'
 });
 
 test('a note count is sent as a string; providerCode stays first in the block', () => {
-  const body = new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-PN-2')
+  const body = new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-PN-2')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, 'TEST_PROVIDER', { debtorType: 'INDIVIDUAL' })
     .withPromissoryNoteCount(3)
     .toJSON();
@@ -153,14 +153,14 @@ test('a note count is sent as a string; providerCode stays first in the block', 
 });
 
 test('noteCount from inputFields may also be passed in the fields', () => {
-  const body = new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-PN-3')
+  const body = new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-PN-3')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, { noteCount: '2' })
     .toJSON();
   assert.equal(body.promissoryNote.noteCount, '2');
 });
 
 test('the plan is required, given once and only with PROMISSORY_NOTE', () => {
-  const base = () => new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-PN-4');
+  const base = () => new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-PN-4');
 
   assert.throws(() => base().withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, DEBTOR).toJSON(), /schedule .* or a noteCount/);
   assert.throws(
@@ -182,43 +182,43 @@ test('the plan is required, given once and only with PROMISSORY_NOTE', () => {
 });
 
 test('schedule rows are checked before sending', () => {
-  const request = () => new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-PN-5')
+  const request = () => new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-PN-5')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, {});
   const bad = [
     [],
     'monthly',
-    [{ amount: 300000 }],
-    [{ amount: 300000, dueDate: '15.01.2030' }],
-    [{ amount: 300000, dueDate: '2030-02-30' }],
+    [{ amount: "300000" }],
+    [{ amount: "300000", dueDate: '15.01.2030' }],
+    [{ amount: "300000", dueDate: '2030-02-30' }],
     [{ amount: 300000.5, dueDate: '2030-01-15' }],
-    [{ amount: '300000', dueDate: '2030-01-15' }],
-    [{ amount: 0, dueDate: '2030-01-15' }],
-    [{ amount: 300000, dueDate: '2030-01-15', currency: 'TRY' }],
-    [{ amount: 100000, dueDate: '2030-02-15' }, { amount: 200000, dueDate: '2030-01-15' }],
-    Array.from({ length: 25 }, () => ({ amount: 12000, dueDate: '2030-01-15' })),
+    [{ amount: 300000, dueDate: '2030-01-15' }],
+    [{ amount: "0", dueDate: '2030-01-15' }],
+    [{ amount: "300000", dueDate: '2030-01-15', currency: 'TRY' }],
+    [{ amount: "100000", dueDate: '2030-02-15' }, { amount: "200000", dueDate: '2030-01-15' }],
+    Array.from({ length: 25 }, () => ({ amount: "12000", dueDate: '2030-01-15' })),
   ];
   for (const schedule of bad) {
     assert.throws(() => request().withPromissoryNoteSchedule(schedule), ConfigurationError, JSON.stringify(schedule).slice(0, 80));
   }
   // Same due date twice is allowed; 24 rows is the limit.
   assert.doesNotThrow(() => request()
-    .withPromissoryNoteSchedule([{ amount: 150000, dueDate: '2030-01-15' }, { amount: 150000, dueDate: '2030-01-15' }])
+    .withPromissoryNoteSchedule([{ amount: "150000", dueDate: '2030-01-15' }, { amount: "150000", dueDate: '2030-01-15' }])
     .toJSON());
-  assert.doesNotThrow(() => new DirectMethodPaymentRequest(24 * 12500, 'TRY', 'O')
+  assert.doesNotThrow(() => new DirectMethodPaymentRequest('300000', 'TRY', 'O')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, {})
-    .withPromissoryNoteSchedule(Array.from({ length: 24 }, () => ({ amount: 12500, dueDate: '2030-01-15' })))
+    .withPromissoryNoteSchedule(Array.from({ length: 24 }, () => ({ amount: "12500", dueDate: '2030-01-15' })))
     .toJSON());
 });
 
 test('the schedule must add up to amount', () => {
-  const request = new DirectMethodPaymentRequest(300001, 'TRY', 'ORD-PN-6')
+  const request = new DirectMethodPaymentRequest('300001', 'TRY', 'ORD-PN-6')
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, {})
     .withPromissoryNoteSchedule(SCHEDULE);
   assert.throws(() => request.toJSON(), /adds up to 300000; it must equal amount \(300001\)/);
 });
 
 test('note counts outside 1–24 are refused', () => {
-  const request = () => new DirectMethodPaymentRequest(300000, 'TRY', 'O');
+  const request = () => new DirectMethodPaymentRequest('300000', 'TRY', 'O');
   for (const count of [0, 25, -1, 2.5, '03', 'three', '', null]) {
     assert.throws(() => request().withPromissoryNoteCount(count), ConfigurationError, JSON.stringify(count));
   }
@@ -250,11 +250,11 @@ test('directMethodPayment sends the promissory-note body signed and keyed; the a
 
 test('a raw promissory-note body is checked for its plan before sending', async () => {
   const { client, calls } = makeClient();
-  const raw = (promissoryNote) => ({ paymentMethod: 'PROMISSORY_NOTE', amount: 300000, currency: 'TRY', orderId: 'O', promissoryNote });
+  const raw = (promissoryNote) => ({ paymentMethod: 'PROMISSORY_NOTE', amount: "300000", currency: 'TRY', orderId: 'O', promissoryNote });
 
   await assert.rejects(() => client.payments.directMethodPayment(raw({ ...DEBTOR }), 'k-1'), /schedule .* or a noteCount/);
   await assert.rejects(() => client.payments.directMethodPayment(raw({ schedule: SCHEDULE, noteCount: '2' }), 'k-2'), /either schedule or noteCount/);
-  await assert.rejects(() => client.payments.directMethodPayment(raw({ schedule: [{ amount: 1, dueDate: '2030-01-15' }] }), 'k-3'), /must equal amount/);
+  await assert.rejects(() => client.payments.directMethodPayment(raw({ schedule: [{ amount: "1", dueDate: '2030-01-15' }] }), 'k-3'), /must equal amount/);
   await assert.rejects(() => client.payments.directMethodPayment(raw(undefined), 'k-4'), /requires the 'promissoryNote' block/);
   assert.equal(calls.length, 0);
 
@@ -280,7 +280,7 @@ test('a block error from the gateway is a ValidationError with the field path', 
 // --- Intent --------------------------------------------------------------------------
 
 test('an intent carries promissoryNote.schedule only', () => {
-  const body = new CreateIntentRequest(300000, 'TRY', 'ORD-PN-I1')
+  const body = new CreateIntentRequest('300000', 'TRY', 'ORD-PN-I1')
     .withPaymentMethod(PaymentMethod.PROMISSORY_NOTE)
     .withPromissoryNoteSchedule(SCHEDULE)
     .toJSON();
@@ -288,17 +288,17 @@ test('an intent carries promissoryNote.schedule only', () => {
   assert.equal(body.paymentMethod, 'PROMISSORY_NOTE');
 
   // Without a pinned method the buyer may still choose another method; the schedule is kept for this one.
-  assert.doesNotThrow(() => new CreateIntentRequest(300000, 'TRY', 'O').withPromissoryNoteSchedule(SCHEDULE).toJSON());
+  assert.doesNotThrow(() => new CreateIntentRequest('300000', 'TRY', 'O').withPromissoryNoteSchedule(SCHEDULE).toJSON());
   assert.throws(
-    () => new CreateIntentRequest(300000, 'TRY', 'O').withPaymentMethod('CARD').withPromissoryNoteSchedule(SCHEDULE).toJSON(),
+    () => new CreateIntentRequest('300000', 'TRY', 'O').withPaymentMethod('CARD').withPromissoryNoteSchedule(SCHEDULE).toJSON(),
     /cannot be sent with paymentMethod CARD/,
   );
-  assert.throws(() => new CreateIntentRequest(300001, 'TRY', 'O').withPromissoryNoteSchedule(SCHEDULE).toJSON(), /must equal amount/);
+  assert.throws(() => new CreateIntentRequest('300001', 'TRY', 'O').withPromissoryNoteSchedule(SCHEDULE).toJSON(), /must equal amount/);
 });
 
 test('createIntent checks a raw promissoryNote before sending', async () => {
   const { client, calls } = makeClient();
-  const raw = (promissoryNote) => ({ amount: 300000, currency: 'TRY', orderId: 'O', paymentMethod: 'PROMISSORY_NOTE', promissoryNote });
+  const raw = (promissoryNote) => ({ amount: "300000", currency: 'TRY', orderId: 'O', paymentMethod: 'PROMISSORY_NOTE', promissoryNote });
 
   await assert.rejects(() => client.payments.createIntent(raw({ noteCount: '3' })), /carries only schedule/);
   await assert.rejects(() => client.payments.createIntent(raw({ schedule: [] })), ConfigurationError);

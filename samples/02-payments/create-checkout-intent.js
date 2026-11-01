@@ -4,7 +4,7 @@ const { CreateIntentRequest } = require('../../src');
 const { sampleClient, idempotencyKey, sampleBuyer, sampleBillingAddress, sampleBasketItems, print } = require('../_common/bootstrap');
 
 (async () => {
-  const amount = 10050;
+  const amount = "10050";
   const orderId = `ORD-CHECKOUT-${Date.now()}`;
   const request = new CreateIntentRequest(amount, 'TRY', orderId)
     .withCallbackUrl('https://merchant.example/payment/callback')

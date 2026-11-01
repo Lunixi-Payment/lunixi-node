@@ -2,7 +2,7 @@
 """Check narrow reviewed fixture exceptions and planted secret-shaped controls.
 
 Never prints findings/values. Raw reports exist only inside a private temporary
-directory containing copies of two already-public, hash-pinned synthetic tests.
+directory containing copies of the reviewed, hash-pinned synthetic tests.
 """
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = {
     "test/fixtures/webhook-v2-vectors.json": "565c81e8397355ed5c64e36064d345a5617c233841be149ba7336b55b478c94d",
-    "test/insurance-client.test.js": "da52e3f44f1a5aa59b001d0f00efd022b3f1b015d2a8a7a94ed1dbe4d5c1b9fe",
+    "test/insurance-client.test.js": "a09a65d068451248643a95bad369cebae204af94a041839a03ee4327b75f101e",
+    "test/fixtures/physical-pos-parity.json": "701ef57d5523516d2af74818456f0926f243e6b65e19ce38f23353d7d22a4b40",
 }
 
 
@@ -48,11 +49,11 @@ def main() -> None:
     rules = parsed.get("rules", [])
     require(len(rules) == 1 and rules[0].get("id") == "generic-api-key", "Only reviewed generic fixture exceptions are allowed.")
     allowlists = rules[0].get("allowlists", [])
-    require(len(allowlists) == 2 and all(item.get("condition") == "AND" and item.get("regexTarget") == "secret" for item in allowlists),
+    require(len(allowlists) == 3 and all(item.get("condition") == "AND" and item.get("regexTarget") == "secret" for item in allowlists),
             "Exceptions must require both exact value and reviewed path.")
     for relative, expected in FIXTURES.items():
         require(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected,
-                "Reviewed public fixture changed; investigate and review its provenance again.")
+                "Reviewed fixture changed; investigate and review its provenance again.")
 
     with tempfile.TemporaryDirectory(prefix="lunixi-secret-fixture-check-") as directory:
         temporary = Path(directory)
@@ -65,8 +66,8 @@ def main() -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
         baseline = scan(source, default, temporary / "baseline.json")
-        require(len(baseline) == 4 and all(item["RuleID"] == "generic-api-key" for item in baseline),
-                "Expected exactly the four reviewed synthetic baseline findings.")
+        require(len(baseline) == 5 and all(item["RuleID"] == "generic-api-key" for item in baseline),
+                "Expected exactly the five reviewed synthetic baseline findings.")
         require(not scan(source, config, temporary / "configured.json"), "Reviewed fixture exceptions failed.")
 
         # Fresh values in EACH allowed file must remain detectable. Invalid JSON
@@ -85,12 +86,13 @@ def main() -> None:
         # The EXACT reviewed value outside its path must still be detected.
         other = source / "src" / "control.js"
         other.parent.mkdir()
-        reviewed = next(item["Secret"] for item in baseline if str(item["File"]).endswith("insurance-client.test.js"))
-        other.write_text('api_key = "' + reviewed + '"\n')
-        require(any(item["RuleID"] == "generic-api-key" and Path(item["File"]) == other
-                    for item in scan(source, config, temporary / "wrong-path.json")),
-                "A reviewed value outside its allowed path was incorrectly ignored.")
-        controls += 1
+        for index, relative in enumerate(FIXTURES):
+            reviewed = next(item["Secret"] for item in baseline if Path(item["File"]) == source / relative)
+            other.write_text('api_key = "' + reviewed + '"\n')
+            require(any(item["RuleID"] == "generic-api-key" and Path(item["File"]) == other
+                        for item in scan(source, config, temporary / f"wrong-path-{index}.json")),
+                    "A reviewed value outside its allowed path was incorrectly ignored.")
+            controls += 1
 
         # An unrelated default rule must still operate (synthetic, never an
         # actual GitHub account credential; no external authentication occurs).
@@ -99,7 +101,7 @@ def main() -> None:
                 "An unrelated default secret rule was disabled.")
         controls += 1
 
-    print(json.dumps({"baselineFindings": 4, "reviewedFixtureFindings": 0,
+    print(json.dumps({"baselineFindings": 5, "reviewedFixtureFindings": 0,
                       "negativeControlsCaught": controls, "allDefaultRulesExtended": True}))
 
 

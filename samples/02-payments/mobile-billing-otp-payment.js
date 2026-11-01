@@ -15,7 +15,7 @@ const { sampleClient, env, idempotencyKey, sampleBuyer, sampleBasketItems, print
 
 (async () => {
   const client = sampleClient();
-  const amount = 5000;
+  const amount = "5000";
   const gsmNumber = env('LUNIXI_BUYER_GSM', '+905350000000');
 
   const methods = (await client.payments.listPaymentMethods()).data.methods;

@@ -268,7 +268,7 @@ test('local validation fails before anything is sent', async () => {
 
 test('an integer amount is sent as its digit string; complete bodies carry the operation id', async () => {
   const { client, calls } = makeClient();
-  await client.wallet.transfers.quoteW2W({ ...W2W, amount: 12550 });
+  await client.wallet.transfers.quoteW2W({ ...W2W, amount: "12550" });
   await client.wallet.transfers.completeW2W(ID.operation, COMPLETE, 'k1');
   assert.equal(JSON.parse(calls[0].body).amount, '12550');
   assert.equal(JSON.parse(calls[1].body).operationId, ID.operation);

@@ -1,0 +1,1146 @@
+{
+  "description": "Physical POS SDK parity fixture. Byte-identical copies in node/test/fixtures, php/tests/PhysicalPos/fixtures, java/src/test/resources and python/tests/fixtures. Expected values computed from the gateway rules (card-data key tokens, field path guard, PAN value scan) and the webhook event catalogue (physical_pos.webhook.events).",
+  "version": 1,
+  "cardDataKeyRule": {
+    "numberTerms": [
+      "pan",
+      "pannumber",
+      "cardpan",
+      "cardnumber",
+      "cardno",
+      "cardnum",
+      "cardnr",
+      "ccnumber",
+      "ccnum",
+      "primaryaccountnumber"
+    ],
+    "secretTerms": [
+      "cvv",
+      "cvv2",
+      "cvc",
+      "cvc2",
+      "cvn",
+      "cvn2",
+      "cav2",
+      "cvvcode",
+      "cvccode",
+      "cardcode",
+      "securitycode",
+      "cardverificationcode",
+      "cardverificationvalue",
+      "track1",
+      "track2",
+      "track3",
+      "tracki",
+      "trackii",
+      "trackiii",
+      "trackdata",
+      "magstripe",
+      "magneticstripe",
+      "pinblock",
+      "pincode",
+      "pinnumber",
+      "pindata",
+      "cardpin",
+      "cardholderpin",
+      "encryptedpin",
+      "expdate",
+      "expmonth",
+      "expyear",
+      "expmmyy",
+      "expirydate",
+      "expirymonth",
+      "expiryyear",
+      "expirymmyy",
+      "expirationdate",
+      "expirationmonth",
+      "expirationyear",
+      "expiremonth",
+      "expireyear",
+      "cardexpiry",
+      "cardexpiration"
+    ],
+    "suffixTerms": [
+      "cardnumber",
+      "pannumber",
+      "primaryaccountnumber",
+      "cvv",
+      "cvv2",
+      "cvc",
+      "cvc2",
+      "cvvcode",
+      "securitycode",
+      "track1",
+      "track2",
+      "trackdata",
+      "pinblock",
+      "expmonth",
+      "expyear",
+      "expirydate",
+      "expirymonth",
+      "expiryyear",
+      "expirationdate",
+      "cardexpiry"
+    ],
+    "wholeKeyTerms": [
+      "track",
+      "expiry",
+      "expiration",
+      "pin",
+      "cid",
+      "csc"
+    ],
+    "maskTokens": [
+      "masked",
+      "mask"
+    ],
+    "digitRunKeyPattern": "[0-9](?:[ -]?[0-9]){12,}"
+  },
+  "cardDataKeyCases": [
+    {
+      "key": "pan",
+      "cardData": true
+    },
+    {
+      "key": "PAN",
+      "cardData": true
+    },
+    {
+      "key": "Pan",
+      "cardData": true
+    },
+    {
+      "key": "cardNumber",
+      "cardData": true
+    },
+    {
+      "key": "card_number",
+      "cardData": true
+    },
+    {
+      "key": "card-number",
+      "cardData": true
+    },
+    {
+      "key": "CardNo",
+      "cardData": true
+    },
+    {
+      "key": "cardNum",
+      "cardData": true
+    },
+    {
+      "key": "ccNumber",
+      "cardData": true
+    },
+    {
+      "key": "primaryAccountNumber",
+      "cardData": true
+    },
+    {
+      "key": "cvv",
+      "cardData": true
+    },
+    {
+      "key": "CVV",
+      "cardData": true
+    },
+    {
+      "key": "cvv2",
+      "cardData": true
+    },
+    {
+      "key": "CVV2",
+      "cardData": true
+    },
+    {
+      "key": "cvc",
+      "cardData": true
+    },
+    {
+      "key": "cvc2",
+      "cardData": true
+    },
+    {
+      "key": "CVVCode",
+      "cardData": true
+    },
+    {
+      "key": "cvvCode",
+      "cardData": true
+    },
+    {
+      "key": "securityCode",
+      "cardData": true
+    },
+    {
+      "key": "cardSecurityCode",
+      "cardData": true
+    },
+    {
+      "key": "card_sec_code",
+      "cardData": false
+    },
+    {
+      "key": "cvn",
+      "cardData": true
+    },
+    {
+      "key": "cav2",
+      "cardData": true
+    },
+    {
+      "key": "track",
+      "cardData": true
+    },
+    {
+      "key": "Track",
+      "cardData": true
+    },
+    {
+      "key": "track1",
+      "cardData": true
+    },
+    {
+      "key": "track2",
+      "cardData": true
+    },
+    {
+      "key": "track2Data",
+      "cardData": true
+    },
+    {
+      "key": "trackData",
+      "cardData": true
+    },
+    {
+      "key": "trackII",
+      "cardData": true
+    },
+    {
+      "key": "magStripe",
+      "cardData": true
+    },
+    {
+      "key": "expiry",
+      "cardData": true
+    },
+    {
+      "key": "Expiry",
+      "cardData": true
+    },
+    {
+      "key": "expiration",
+      "cardData": true
+    },
+    {
+      "key": "expiryDate",
+      "cardData": true
+    },
+    {
+      "key": "expMonth",
+      "cardData": true
+    },
+    {
+      "key": "exp_year",
+      "cardData": true
+    },
+    {
+      "key": "expirationDate",
+      "cardData": true
+    },
+    {
+      "key": "expireMonth",
+      "cardData": true
+    },
+    {
+      "key": "cardExpiry",
+      "cardData": true
+    },
+    {
+      "key": "pin",
+      "cardData": true
+    },
+    {
+      "key": "PIN",
+      "cardData": true
+    },
+    {
+      "key": "pinBlock",
+      "cardData": true
+    },
+    {
+      "key": "pinCode",
+      "cardData": true
+    },
+    {
+      "key": "cardholderPin",
+      "cardData": true
+    },
+    {
+      "key": "encryptedPin",
+      "cardData": true
+    },
+    {
+      "key": "cid",
+      "cardData": true
+    },
+    {
+      "key": "csc",
+      "cardData": true
+    },
+    {
+      "key": "customercardnumber",
+      "cardData": true
+    },
+    {
+      "key": "vendortrack2",
+      "cardData": true
+    },
+    {
+      "key": "cardcvv",
+      "cardData": true
+    },
+    {
+      "key": "card.number",
+      "cardData": true
+    },
+    {
+      "key": "card number",
+      "cardData": true
+    },
+    {
+      "key": "panel",
+      "cardData": false
+    },
+    {
+      "key": "company",
+      "cardData": false
+    },
+    {
+      "key": "span",
+      "cardData": false
+    },
+    {
+      "key": "japan",
+      "cardData": false
+    },
+    {
+      "key": "expiresAt",
+      "cardData": false
+    },
+    {
+      "key": "expectedAmount",
+      "cardData": false
+    },
+    {
+      "key": "trackingNo",
+      "cardData": false
+    },
+    {
+      "key": "trackUrl",
+      "cardData": false
+    },
+    {
+      "key": "tokenExpiry",
+      "cardData": false
+    },
+    {
+      "key": "pinKeyKcv",
+      "cardData": false
+    },
+    {
+      "key": "maskedPan",
+      "cardData": false
+    },
+    {
+      "key": "cardNumberMasked",
+      "cardData": false
+    },
+    {
+      "key": "masked_card_number",
+      "cardData": false
+    },
+    {
+      "key": "merchantReference",
+      "cardData": false
+    },
+    {
+      "key": "paymentId",
+      "cardData": false
+    },
+    {
+      "key": "amountMinor",
+      "cardData": false
+    },
+    {
+      "key": "taxGroupCode",
+      "cardData": false
+    },
+    {
+      "key": "lineTotalMinor",
+      "cardData": false
+    },
+    {
+      "key": "cardBrand",
+      "cardData": false
+    },
+    {
+      "key": "cardMasked",
+      "cardData": false
+    },
+    {
+      "key": "entryMode",
+      "cardData": false
+    },
+    {
+      "key": "expiresIn",
+      "cardData": false
+    },
+    {
+      "key": "pinned",
+      "cardData": false
+    },
+    {
+      "key": "cidr",
+      "cardData": false
+    },
+    {
+      "key": "description",
+      "cardData": false
+    },
+    {
+      "key": "name",
+      "cardData": false
+    },
+    {
+      "key": "barcode",
+      "cardData": false
+    },
+    {
+      "key": "deviceId",
+      "cardData": false
+    },
+    {
+      "key": "serialNumber",
+      "cardData": false
+    },
+    {
+      "key": "externalRef",
+      "cardData": false
+    }
+  ],
+  "cardDataPathCases": [
+    {
+      "body": {
+        "cardNumber": "x"
+      },
+      "field": "cardNumber"
+    },
+    {
+      "body": {
+        "operation": "SALE",
+        "target": {
+          "deviceId": "d",
+          "pan": "x"
+        }
+      },
+      "field": "target.pan"
+    },
+    {
+      "body": {
+        "operation": "SALE",
+        "items": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "b",
+            "cvv": "1"
+          }
+        ]
+      },
+      "field": "items[1].cvv"
+    },
+    {
+      "body": {
+        "operation": "SALE",
+        "track2Data": "x"
+      },
+      "field": "track2Data"
+    },
+    {
+      "body": {
+        "4111111111111111": "x"
+      },
+      "field": "(body)"
+    },
+    {
+      "body": {
+        "target": {
+          "4111 1111 1111 1111": "x"
+        }
+      },
+      "field": "target"
+    },
+    {
+      "body": {
+        "operation": "SALE",
+        "maskedPan": "x",
+        "currency": "TRY"
+      },
+      "field": null
+    },
+    {
+      "body": {
+        "weird key": {
+          "pan": "x"
+        }
+      },
+      "field": "[?].pan"
+    },
+    {
+      "body": {
+        "operation": "SALE",
+        "amountMinor": 1,
+        "merchantReference": "4111111111111111"
+      },
+      "field": null
+    }
+  ],
+  "panValueRule": {
+    "candidatePattern": "(?<![\\p{L}\\p{N}])(?<![\\p{L}\\p{N}]-)[0-9](?:[ -]?[0-9]){12,18}(?![\\p{L}\\p{N}])(?!-[\\p{L}\\p{N}])",
+    "digits": "13-19 after removing spaces and dashes; Luhn valid",
+    "itemTextExemption": "ITEM_TEXT only: an unseparated 13 or 14 digit candidate with a valid GTIN check digit is a barcode",
+    "strictFields": {
+      "createPayment": [
+        "merchantReference",
+        "items[].taxGroupCode"
+      ],
+      "createReversal": [
+        "merchantReference"
+      ],
+      "filters": [
+        "merchantReference",
+        "q"
+      ]
+    },
+    "itemTextFields": {
+      "createPayment": [
+        "items[].name"
+      ]
+    }
+  },
+  "panValueCases": [
+    {
+      "value": "4111111111111111",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "4111 1111 1111 1111",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "4111-1111-1111-1111",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "kart 4111 1111 1111 1111",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "ref:4111111111111111.",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "\"5500000000000004\"",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "378282246310005",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "6011000990139424",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "4111111111111112",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "411111111111",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "41111111111111111111",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "ORD-4111111111111111",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "TR4111111111111111",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "4111111111111111-A",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "01a1dea6-4178-7014-8004-a80353225588",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "ORD-2026-000123",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "Tea 2x",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "8691234567012",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "8691234567012",
+      "mode": "ITEM_TEXT",
+      "pan": false
+    },
+    {
+      "value": "Simit 8691234567012",
+      "mode": "ITEM_TEXT",
+      "pan": false
+    },
+    {
+      "value": "4111111111111111",
+      "mode": "ITEM_TEXT",
+      "pan": true
+    },
+    {
+      "value": "4111 1111 1111 1111",
+      "mode": "ITEM_TEXT",
+      "pan": true
+    },
+    {
+      "value": "0000000000000",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "0000000000000",
+      "mode": "ITEM_TEXT",
+      "pan": false
+    },
+    {
+      "value": "١٢٣٤٥٦٧٨٩٠١٢٣٤",
+      "mode": "STRICT",
+      "pan": false
+    },
+    {
+      "value": "8690000000067",
+      "mode": "STRICT",
+      "pan": true
+    },
+    {
+      "value": "8690000000067",
+      "mode": "ITEM_TEXT",
+      "pan": false
+    },
+    {
+      "value": "8690 000000067",
+      "mode": "ITEM_TEXT",
+      "pan": true
+    }
+  ],
+  "forbiddenFields": [
+    "environment",
+    "organizationId",
+    "merchantId",
+    "actorId",
+    "actorType",
+    "cardNumber",
+    "pan",
+    "cvv",
+    "expiry",
+    "track2"
+  ],
+  "idempotencyKeyCases": [
+    {
+      "key": "7b0c6a1e-2f8d-4c55-9a51-3f0e8d1c2a90",
+      "valid": true
+    },
+    {
+      "key": "pos-key-1",
+      "valid": true
+    },
+    {
+      "key": "!~ascii-only~!",
+      "valid": true
+    },
+    {
+      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "valid": true
+    },
+    {
+      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "valid": false
+    },
+    {
+      "key": "short",
+      "valid": false
+    },
+    {
+      "key": "1234567",
+      "valid": false
+    },
+    {
+      "key": "",
+      "valid": false
+    },
+    {
+      "key": "        ",
+      "valid": false
+    },
+    {
+      "key": " pos-key-1",
+      "valid": false
+    },
+    {
+      "key": "pos-key-1 ",
+      "valid": false
+    },
+    {
+      "key": "pos key 01",
+      "valid": false
+    },
+    {
+      "key": "pos-key-ş1",
+      "valid": false
+    },
+    {
+      "key": "pos-key-\t1",
+      "valid": false
+    }
+  ],
+  "notStartedCodes": [
+    "physical_pos.presence.unavailable",
+    "physical_pos.signing.unavailable",
+    "physical_pos.service.busy",
+    "physical_pos.service.clock_skew",
+    "physical_pos.service.not_configured"
+  ],
+  "requestFields": {
+    "createPayment": [
+      "operation",
+      "target",
+      "amountMinor",
+      "currency",
+      "installmentCount",
+      "instrument",
+      "merchantReference",
+      "allowDuplicateReference",
+      "startTimeoutSeconds",
+      "terminalAcquirerId",
+      "items"
+    ],
+    "paymentTarget": [
+      "deviceId",
+      "vendorCode",
+      "serialNumber",
+      "externalRef"
+    ],
+    "saleItem": [
+      "lineNo",
+      "name",
+      "quantityMilli",
+      "unitCode",
+      "unitPriceMinor",
+      "taxGroupCode",
+      "lineTotalMinor",
+      "barcode"
+    ],
+    "createReversal": [
+      "operation",
+      "amountMinor",
+      "currency",
+      "merchantReference",
+      "startTimeoutSeconds",
+      "target",
+      "items"
+    ],
+    "refundItem": [
+      "lineNo",
+      "quantityMilli",
+      "amountMinor"
+    ],
+    "createStore": [
+      "code",
+      "name",
+      "city",
+      "district",
+      "addressLine",
+      "timezone",
+      "externalRef"
+    ],
+    "updateStore": [
+      "rowVersion",
+      "name",
+      "city",
+      "district",
+      "addressLine",
+      "timezone",
+      "externalRef"
+    ],
+    "statusChange": [
+      "rowVersion",
+      "reasonCode"
+    ],
+    "createRegister": [
+      "code",
+      "name"
+    ],
+    "updateRegister": [
+      "rowVersion",
+      "name"
+    ],
+    "createTerminal": [
+      "code",
+      "displayName",
+      "vendorCode",
+      "virtualSerial",
+      "vendorTerminalRef"
+    ],
+    "updateTerminal": [
+      "rowVersion",
+      "displayName",
+      "vendorCode"
+    ],
+    "addTerminalAcquirer": [
+      "vendorAcquirerRef",
+      "merchantNumber",
+      "terminalNumber",
+      "label",
+      "currencies"
+    ],
+    "updateTerminalAcquirer": [
+      "rowVersion",
+      "label",
+      "currencies",
+      "status"
+    ],
+    "changeTerminalDevice": [
+      "rowVersion",
+      "deviceId",
+      "reasonCode"
+    ],
+    "createDevice": [
+      "vendorCode",
+      "deviceModelId",
+      "serialNumber",
+      "displayName",
+      "externalRef",
+      "storeId",
+      "registerId",
+      "integrationChannel",
+      "channelVariant",
+      "appMode"
+    ],
+    "updateDevice": [
+      "rowVersion",
+      "displayName",
+      "externalRef",
+      "integrationChannel",
+      "channelVariant",
+      "appMode"
+    ],
+    "assignDevice": [
+      "rowVersion",
+      "storeId",
+      "registerId",
+      "reasonCode"
+    ],
+    "changeDeviceLifecycle": [
+      "rowVersion",
+      "target",
+      "reasonCode"
+    ]
+  },
+  "filters": {
+    "listPayments": [
+      "limit",
+      "cursor",
+      "deviceId",
+      "paymentStatus",
+      "createdFrom",
+      "createdTo",
+      "merchantReference"
+    ],
+    "listTransactions": [
+      "limit",
+      "cursor",
+      "deviceId",
+      "storeId",
+      "registerId",
+      "paymentStatus",
+      "createdFrom",
+      "createdTo",
+      "merchantReference",
+      "amountFromMinor",
+      "amountToMinor",
+      "origin",
+      "operation"
+    ],
+    "listAmbiguousPayments": [
+      "limit",
+      "cursor",
+      "deviceId",
+      "paymentStatus"
+    ],
+    "getSalesSummary": [
+      "dateFrom",
+      "dateTo",
+      "deviceId",
+      "storeId",
+      "groupBy"
+    ],
+    "getTaxSummary": [
+      "dateFrom",
+      "dateTo",
+      "deviceId",
+      "storeId"
+    ],
+    "listSettlements": [
+      "limit",
+      "cursor",
+      "deviceId",
+      "lineStatus",
+      "createdFrom",
+      "createdTo"
+    ],
+    "listDeviceModels": [
+      "vendorCode",
+      "deviceType",
+      "status"
+    ],
+    "listStores": [
+      "limit",
+      "cursor",
+      "includeTotal",
+      "status",
+      "q"
+    ],
+    "listRegisters": [
+      "limit",
+      "cursor",
+      "includeTotal",
+      "status"
+    ],
+    "listTerminals": [
+      "limit",
+      "cursor",
+      "includeTotal",
+      "status",
+      "q"
+    ],
+    "listTerminalAcquirers": [
+      "limit",
+      "cursor",
+      "includeTotal"
+    ],
+    "listDevices": [
+      "limit",
+      "cursor",
+      "includeTotal",
+      "storeId",
+      "registerId",
+      "vendorCode",
+      "deviceModelId",
+      "deviceType",
+      "lifecycleStatus",
+      "ownershipStatus",
+      "integrationChannel",
+      "q"
+    ],
+    "history": [
+      "limit",
+      "cursor"
+    ]
+  },
+  "pathIdCases": [
+    {
+      "id": "0192f3a1-0000-7000-8000-000000000001",
+      "valid": true
+    },
+    {
+      "id": "a/b",
+      "valid": true,
+      "encoded": "a%2Fb"
+    },
+    {
+      "id": "",
+      "valid": false
+    },
+    {
+      "id": ".",
+      "valid": false
+    },
+    {
+      "id": "..",
+      "valid": false
+    }
+  ],
+  "eventTypes": [
+    "physical_pos.payment.approved",
+    "physical_pos.payment.partially_approved",
+    "physical_pos.payment.declined",
+    "physical_pos.payment.cancelled",
+    "physical_pos.payment.expired",
+    "physical_pos.payment.failed",
+    "physical_pos.payment.unknown",
+    "physical_pos.payment.manual_review",
+    "physical_pos.payment.device_sale",
+    "physical_pos.fiscal_document.issued",
+    "physical_pos.fiscal_document.failed",
+    "physical_pos.fiscal_document.cancelled",
+    "physical_pos.fiscal_document.action_required"
+  ],
+  "webhookOriginalCases": [
+    {
+      "name": "root",
+      "data": {
+        "original": null
+      },
+      "original": null
+    },
+    {
+      "name": "absent",
+      "data": {},
+      "original": null
+    },
+    {
+      "name": "api",
+      "data": {
+        "original": {
+          "paymentId": "p0",
+          "origin": "API"
+        }
+      },
+      "original": {
+        "paymentId": "p0",
+        "origin": "API"
+      }
+    },
+    {
+      "name": "device_direct",
+      "data": {
+        "original": {
+          "paymentId": "p0",
+          "origin": "DEVICE_DIRECT"
+        }
+      },
+      "original": {
+        "paymentId": "p0",
+        "origin": "DEVICE_DIRECT"
+      }
+    },
+    {
+      "name": "future_origin",
+      "data": {
+        "original": {
+          "paymentId": "p0",
+          "origin": "LATER"
+        }
+      },
+      "original": {
+        "paymentId": "p0",
+        "origin": "LATER"
+      }
+    },
+    {
+      "name": "extra_keys_dropped",
+      "data": {
+        "original": {
+          "paymentId": "p0",
+          "origin": "API",
+          "note": "x"
+        }
+      },
+      "original": {
+        "paymentId": "p0",
+        "origin": "API"
+      }
+    },
+    {
+      "name": "empty_payment_id",
+      "data": {
+        "original": {
+          "paymentId": "",
+          "origin": "API"
+        }
+      },
+      "original": null
+    },
+    {
+      "name": "missing_origin",
+      "data": {
+        "original": {
+          "paymentId": "p0"
+        }
+      },
+      "original": null
+    },
+    {
+      "name": "non_string_origin",
+      "data": {
+        "original": {
+          "paymentId": "p0",
+          "origin": 1
+        }
+      },
+      "original": null
+    },
+    {
+      "name": "string",
+      "data": {
+        "original": "p0"
+      },
+      "original": null
+    },
+    {
+      "name": "list",
+      "data": {
+        "original": [
+          "p0",
+          "API"
+        ]
+      },
+      "original": null
+    }
+  ]
+}

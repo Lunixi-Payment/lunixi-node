@@ -149,7 +149,7 @@ function linkJson(overrides = {}) {
     usage: 'SINGLE_USE',
     amountMode: 'FIXED',
     currency: 'TRY',
-    amountMinor: 150000,
+    amountMinor: "150000",
     title: 'Kasım danışmanlık bedeli',
     ...overrides,
   };
@@ -166,7 +166,7 @@ function route(call) {
 test('create is signed per request with the API key and verifies like SignatureGuard', async () => {
   const { client, calls, tokenCalls, publicKey } = makeClient(() => jsonResponse(201, successEnvelope({ ...linkJson(), replayed: false })));
 
-  const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, 150000, 'try', 'Kasım danışmanlık bedeli')
+  const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, '150000', 'try', 'Kasım danışmanlık bedeli')
     .withDescription('Satır sonu ve "tırnak" / eğik çizgi')
     .withExpiresAt(new Date('2026-10-31T20:59:59Z'))
     .withReference('INV-2026-0042')
@@ -191,7 +191,7 @@ test('create is signed per request with the API key and verifies like SignatureG
   assert.equal(body.usage, 'SINGLE_USE');
   assert.equal(body.amountMode, 'FIXED');
   assert.equal(body.currency, 'TRY');
-  assert.equal(body.amountMinor, 150000);
+  assert.equal(body.amountMinor, '150000');
   assert.equal(body.expiresAt, '2026-10-31T20:59:59.000Z');
   assert.equal(body.environment, undefined, 'the key decides the environment');
 });
@@ -208,7 +208,7 @@ test('every payment-link call is signed: the routes accept the API-key signature
   });
   const links = client.paymentLinks;
   const invocations = {
-    create: () => links.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x'), 'plink-lock-create'),
+    create: () => links.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x'), 'plink-lock-create'),
     list: () => links.list({ limit: 5 }),
     iterate: async () => { for await (const row of links.iterate()) void row; },
     get: () => links.get(LINK_ID),
@@ -251,7 +251,7 @@ test('every payment-link call is signed: the routes accept the API-key signature
 
 test('the SignatureGuard stand-in rejects what the gateway rejects (negative controls)', async () => {
   const { client, calls, publicKey } = makeClient(() => jsonResponse(201, successEnvelope(linkJson())));
-  await client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x'), 'plink-negative-1');
+  await client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x'), 'plink-negative-1');
   const call = calls[0];
 
   const indented = { ...call, body: JSON.stringify(JSON.parse(call.body), null, 2) };
@@ -270,7 +270,7 @@ test('the SignatureGuard stand-in rejects what the gateway rejects (negative con
 
 test('create requires a well-formed Idempotency-Key before any request is sent', async () => {
   const { client, calls, tokenCalls } = makeClient(() => jsonResponse(201, successEnvelope(linkJson())));
-  const request = CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x');
+  const request = CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x');
 
   await assert.rejects(() => client.paymentLinks.create(request), ConfigurationError);
   await assert.rejects(() => client.paymentLinks.create(request, 'short'), /8-200 printable ASCII/);
@@ -281,7 +281,7 @@ test('create requires a well-formed Idempotency-Key before any request is sent',
 
 test('create rejects unknown fields locally (the gateway would answer 400)', async () => {
   const { client, calls } = makeClient(() => jsonResponse(201, successEnvelope(linkJson())));
-  const body = { ...CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').toJSON(), merchantId: 'org_x' };
+  const body = { ...CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').toJSON(), merchantId: 'org_x' };
 
   await assert.rejects(() => client.paymentLinks.create(body, 'plink-unknown-1'), /Unknown payment link create field\(s\): merchantId/);
   assert.equal(calls.length, 0);
@@ -289,35 +289,35 @@ test('create rejects unknown fields locally (the gateway would answer 400)', asy
 
 test('a replayed create returns the stored link with replayed=true', async () => {
   const { client } = makeClient(() => jsonResponse(200, successEnvelope({ ...linkJson(), replayed: true })));
-  const link = await client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x'), 'plink-replay-1');
+  const link = await client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x'), 'plink-replay-1');
   assert.equal(link.replayed, true);
 });
 
 test('builders produce the contract body for OPEN and ITEMIZED links', () => {
   const open = CreatePaymentLinkRequest.open(PaymentLinkUsage.MULTI_USE, 'TRY', 'Bağış', {
-    minAmountMinor: 1000,
-    maxAmountMinor: 500000,
-    suggestedAmountsMinor: [5000, 10000, 25000],
+    minAmountMinor: "1000",
+    maxAmountMinor: "500000",
+    suggestedAmountsMinor: ['5000', '10000', '25000'],
   }).withButtonLabelKey('DONATE').toJSON();
   assert.deepEqual(open, {
     usage: 'MULTI_USE',
     amountMode: 'OPEN',
     currency: 'TRY',
     title: 'Bağış',
-    minAmountMinor: 1000,
-    maxAmountMinor: 500000,
-    suggestedAmountsMinor: [5000, 10000, 25000],
+    minAmountMinor: "1000",
+    maxAmountMinor: "500000",
+    suggestedAmountsMinor: ['5000', '10000', '25000'],
     buttonLabelKey: 'DONATE',
   });
 
   const itemized = CreatePaymentLinkRequest.itemized(PaymentLinkUsage.MULTI_USE, 'TRY', 'Etkinlik', [
-    new PaymentLinkItem('Standart bilet', 45000).withItemKey('standard').withQuantityRange(0, 5).withCapacity(100),
+    new PaymentLinkItem('Standart bilet', '45000').withItemKey('standard').withQuantityRange(0, 5).withCapacity(100),
   ])
     .addCustomField(new PaymentLinkCustomField('invoice_no', 'Fatura no', CustomFieldType.TEXT).withRequired().withMaxLength(32))
     .withCapacity(null)
     .toJSON();
   assert.deepEqual(itemized.items, [{
-    name: 'Standart bilet', unitPriceMinor: 45000, itemKey: 'standard', minQuantity: 0, maxQuantity: 5, capacity: 100,
+    name: 'Standart bilet', unitPriceMinor: "45000", itemKey: 'standard', minQuantity: 0, maxQuantity: 5, capacity: 100,
   }]);
   assert.deepEqual(itemized.customFields, [{
     key: 'invoice_no', label: 'Fatura no', fieldType: 'TEXT', required: true, maxLength: 32,
@@ -326,7 +326,7 @@ test('builders produce the contract body for OPEN and ITEMIZED links', () => {
 });
 
 test('every builder output key is a contract field (CreatePaymentLinkBody)', () => {
-  const full = CreatePaymentLinkRequest.fixed('MULTI_USE', 1000, 'TRY', 'Tam')
+  const full = CreatePaymentLinkRequest.fixed('MULTI_USE', '1000', 'TRY', 'Tam')
     .withEnvironment('TEST')
     .withQuantity(1, 5)
     .withCapacity(100)
@@ -367,21 +367,21 @@ test('every builder output key is a contract field (CreatePaymentLinkBody)', () 
 
 test('builders reject decimal money and values outside the closed sets', () => {
   assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1500.5, 'TRY', 'x'), /minor units/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '150000', 'TRY', 'x'), /minor units/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('ONCE', 1000, 'TRY', 'x'), /usage must be one of/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 150000, 'TRY', 'x'), /minor units/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('ONCE', '1000', 'TRY', 'x'), /usage must be one of/);
   assert.throws(() => new CreatePaymentLinkRequest('SINGLE_USE', 'FREE', 'TRY', 'x'), /amountMode must be one of/);
   assert.throws(() => CreatePaymentLinkRequest.itemized('MULTI_USE', 'TRY', 'x', []), /at least one item/);
   assert.throws(() => new PaymentLinkCustomField('k', 'l', 'FILE'), /fieldType must be one of/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').withMetadata({ a: 1 }), /values are strings/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').withEnvironment('PROD'), /environment must be one of/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').withLocale('de'), /locale must be one of tr, en/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').withButtonLabelKey('ORDER'), /buttonLabelKey must be one of/);
-  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x').withImageAssetId('logo.png'), /imageAssetId must be an asset id/);
-  assert.throws(() => new PaymentLinkItem('Bilet', 1000).withImageAssetId('https://cdn.example/x.png'), /imageAssetId must be an asset id/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').withMetadata({ a: 1 }), /values are strings/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').withEnvironment('PROD'), /environment must be one of/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').withLocale('de'), /locale must be one of tr, en/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').withButtonLabelKey('ORDER'), /buttonLabelKey must be one of/);
+  assert.throws(() => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x').withImageAssetId('logo.png'), /imageAssetId must be an asset id/);
+  assert.throws(() => new PaymentLinkItem('Bilet', '1000').withImageAssetId('https://cdn.example/x.png'), /imageAssetId must be an asset id/);
 });
 
 test('nested objects are checked against the keys the gateway DTO declares', () => {
-  const base = () => CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x');
+  const base = () => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x');
 
   assert.throws(() => base().withBuyerFields({ fax: 'REQUIRED' }), /Unknown buyerFields field\(s\): fax/);
   assert.throws(() => base().withBuyerFields({ name: 'MANDATORY' }), /buyerFields\.name must be one of HIDDEN, OPTIONAL, REQUIRED/);
@@ -589,7 +589,7 @@ test('gateway errors surface the payment_link code and details', async () => {
   const { client } = makeClient(() => jsonResponse(422, failure, { 'x-request-id': 'req_9' }));
 
   await assert.rejects(
-    () => client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', 1000, 'TRY', 'x'), 'plink-invalid-1'),
+    () => client.paymentLinks.create(CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x'), 'plink-invalid-1'),
     (error) => {
       assert.ok(error instanceof ApiError);
       assert.ok(!(error instanceof ValidationError), '422 is a semantic rejection, not a malformed body');

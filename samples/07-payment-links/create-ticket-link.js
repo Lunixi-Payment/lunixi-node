@@ -27,8 +27,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   const salesCloseAt = new Date(eventAt.getTime() - 2 * 60 * 60 * 1000);
 
   const request = CreatePaymentLinkRequest.itemized(PaymentLinkUsage.MULTI_USE, 'TRY', 'Yıl sonu konseri', [
-    new PaymentLinkItem('Standart bilet', 45000).withItemKey('standard').withQuantityRange(0, 6).withCapacity(400),
-    new PaymentLinkItem('Balkon bilet', 30000).withItemKey('balcony').withQuantityRange(0, 6).withCapacity(150),
+    new PaymentLinkItem('Standart bilet', '45000').withItemKey('standard').withQuantityRange(0, 6).withCapacity(400),
+    new PaymentLinkItem('Balkon bilet', '30000').withItemKey('balcony').withQuantityRange(0, 6).withCapacity(150),
   ])
     .withEventAt(eventAt)
     .withExpiresAt(salesCloseAt)

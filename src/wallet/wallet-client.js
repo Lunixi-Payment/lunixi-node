@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const { ConfigurationError } = require('../errors');
 const {
   WALLET_ROUTES,
@@ -523,7 +525,7 @@ function pickQuery(routeName, route, filters) {
  * rounded.
  */
 function requireAmount(label, value) {
-  const text = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? String(value) : value;
+  const text = minor(value, label);
   if (typeof text !== 'string' || !AMOUNT_PATTERN.test(text)) {
     throw new ConfigurationError(`${label} must be minor units as a digit string (e.g. "12550" for 125.50); got ${JSON.stringify(value)}.`);
   }

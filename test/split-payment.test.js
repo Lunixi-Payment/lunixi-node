@@ -63,11 +63,11 @@ function jsonResponse(status, body) {
 }
 
 function cardAndMobileBilling() {
-  return new SplitPaymentRequest(100000, 'try', 'cuk_abc123')
+  return new SplitPaymentRequest('100000', 'try', 'cuk_abc123')
     .withOrderId('order-2026-001')
     .withCallbackUrl('https://merchant.example/split-return')
-    .addCardLeg('ct_vault_1', 60000, { force3D: true })
-    .addMethodLeg(PaymentMethod.MOBILE_BILLING, 'PAYCELL_MOBILE_BILLING', 40000, { gsmNumber: '+905321234567' });
+    .addCardLeg('ct_vault_1', '60000', { force3D: true })
+    .addMethodLeg(PaymentMethod.MOBILE_BILLING, 'PAYCELL_MOBILE_BILLING', '40000', { gsmNumber: '+905321234567' });
 }
 
 function splitData(status, extra = {}) {
@@ -89,23 +89,23 @@ function splitData(status, extra = {}) {
 
 test('SplitPaymentRequest builds a card leg and a method leg with the direct/payment block', () => {
   assert.deepEqual(cardAndMobileBilling().toJSON(), {
-    totalAmount: 100000,
+    totalAmount: "100000",
     currency: 'TRY',
     ownerRef: 'cuk_abc123',
     orderId: 'order-2026-001',
     callbackUrl: 'https://merchant.example/split-return',
     legs: [
-      { cardToken: 'ct_vault_1', amount: 60000, force3D: true },
-      { paymentMethod: 'MOBILE_BILLING', amount: 40000, mobileBilling: { providerCode: 'PAYCELL_MOBILE_BILLING', gsmNumber: '+905321234567' } },
+      { cardToken: 'ct_vault_1', amount: "60000", force3D: true },
+      { paymentMethod: 'MOBILE_BILLING', amount: "40000", mobileBilling: { providerCode: 'PAYCELL_MOBILE_BILLING', gsmNumber: '+905321234567' } },
     ],
   });
 });
 
 test('every key the builder emits is a gateway DTO field', () => {
-  const body = new SplitPaymentRequest(30000, 'TRY', 'cuk_1')
-    .addCardLeg('ct_1', 10000, { installment: 3, installmentQuoteToken: 'iq_1' })
-    .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', 10000, { gsmNumber: '+905321234567' })
-    .addMethodLeg(PaymentMethod.PROMISSORY_NOTE, 'EXAMPLE_PROVIDER', 10000, { noteCount: 3, debtorType: 'INDIVIDUAL' })
+  const body = new SplitPaymentRequest('30000', 'TRY', 'cuk_1')
+    .addCardLeg('ct_1', '10000', { installment: 3, installmentQuoteToken: 'iq_1' })
+    .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', '10000', { gsmNumber: '+905321234567' })
+    .addMethodLeg(PaymentMethod.PROMISSORY_NOTE, 'EXAMPLE_PROVIDER', '10000', { noteCount: 3, debtorType: 'INDIVIDUAL' })
     .toJSON();
 
   assert.deepEqual(Object.keys(body).filter((key) => !SPLIT_PAYMENT_FIELDS.includes(key)), []);
@@ -120,34 +120,34 @@ test('every key the builder emits is a gateway DTO field', () => {
 });
 
 test('the legs must add up to totalAmount', () => {
-  const request = new SplitPaymentRequest(100000, 'TRY', 'cuk_1').addCardLeg('ct_1', 60000).addCardLeg('ct_2', 30000);
+  const request = new SplitPaymentRequest('100000', 'TRY', 'cuk_1').addCardLeg('ct_1', '60000').addCardLeg('ct_2', '30000');
   assert.throws(() => request.toJSON(), /add up to 90000 but totalAmount is 100000/);
 });
 
 test('a method leg needs providerCode and only its own block; card fields stay on card legs', async () => {
-  const base = () => new SplitPaymentRequest(10000, 'TRY', 'cuk_1');
-  assert.throws(() => base().addMethodLeg(PaymentMethod.MOBILE_BILLING, null, 10000, {}), /providerCode is required/);
-  assert.throws(() => base().addMethodLeg(PaymentMethod.CARD, 'X', 10000), /addCardLeg/);
-  assert.throws(() => base().addMethodLeg(PaymentMethod.MOBILE_BILLING, 'PAYCELL_MOBILE_BILLING', 10000, { providerCode: 'X' }), ConfigurationError);
-  assert.throws(() => base().addMethodLeg(PaymentMethod.BNPL, 'X', 10000), /cannot be a split payment leg/);
+  const base = () => new SplitPaymentRequest('10000', 'TRY', 'cuk_1');
+  assert.throws(() => base().addMethodLeg(PaymentMethod.MOBILE_BILLING, null, '10000', {}), /providerCode is required/);
+  assert.throws(() => base().addMethodLeg(PaymentMethod.CARD, 'X', '10000'), /addCardLeg/);
+  assert.throws(() => base().addMethodLeg(PaymentMethod.MOBILE_BILLING, 'PAYCELL_MOBILE_BILLING', '10000', { providerCode: 'X' }), ConfigurationError);
+  assert.throws(() => base().addMethodLeg(PaymentMethod.BNPL, 'X', '10000'), /cannot be a split payment leg/);
 
-  const raw = (leg) => ({ totalAmount: 10000, currency: 'TRY', ownerRef: 'cuk_1', legs: [leg] });
+  const raw = (leg) => ({ totalAmount: "10000", currency: 'TRY', ownerRef: 'cuk_1', legs: [leg] });
   const { client } = makeClient();
   const refused = [
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { gsmNumber: '+905321234567' } },
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { providerCode: 'A' }, cardToken: 'ct_1' },
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { providerCode: 'A' }, force3D: true },
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { providerCode: 'A' }, installment: 2 },
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { providerCode: 'A' }, installmentQuoteToken: 'iq' },
-    { paymentMethod: 'MOBILE_BILLING', amount: 10000, mobileBilling: { providerCode: 'A' }, wallet: { providerCode: 'B' } },
-    { paymentMethod: 'PROMISSORY_NOTE', amount: 10000, promissoryNote: { providerCode: 'A', schedule: [{ amount: 10000, dueDate: '2030-01-15' }] } },
-    { paymentMethod: 'PROMISSORY_NOTE', amount: 10000, promissoryNote: { providerCode: 'A' } },
-    { amount: 10000 },
-    { cardToken: 'ct_1', amount: 10000, mobileBilling: { providerCode: 'A' } },
-    { cardToken: 'ct_1', amount: 10000, installment: 2 },
-    { cardToken: 'ct_1', amount: 10000, installment: 37, installmentQuoteToken: 'iq' },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { gsmNumber: '+905321234567' } },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { providerCode: 'A' }, cardToken: 'ct_1' },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { providerCode: 'A' }, force3D: true },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { providerCode: 'A' }, installment: 2 },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { providerCode: 'A' }, installmentQuoteToken: 'iq' },
+    { paymentMethod: 'MOBILE_BILLING', amount: "10000", mobileBilling: { providerCode: 'A' }, wallet: { providerCode: 'B' } },
+    { paymentMethod: 'PROMISSORY_NOTE', amount: "10000", promissoryNote: { providerCode: 'A', schedule: [{ amount: "10000", dueDate: '2030-01-15' }] } },
+    { paymentMethod: 'PROMISSORY_NOTE', amount: "10000", promissoryNote: { providerCode: 'A' } },
+    { amount: "10000" },
+    { cardToken: 'ct_1', amount: "10000", mobileBilling: { providerCode: 'A' } },
+    { cardToken: 'ct_1', amount: "10000", installment: 2 },
+    { cardToken: 'ct_1', amount: "10000", installment: 37, installmentQuoteToken: 'iq' },
     { cardToken: 'ct_1', amount: 10000.5 },
-    { cardToken: 'ct_1', amount: 10000, price: 10000 },
+    { cardToken: 'ct_1', amount: "10000", price: "10000" },
   ];
   for (const leg of refused) {
     await assert.rejects(client.payments.createSplitPayment(raw(leg), 'split-k'), ConfigurationError, JSON.stringify(leg));
@@ -156,26 +156,26 @@ test('a method leg needs providerCode and only its own block; card fields stay o
 
 test('one leg per provider and one leg per card', () => {
   assert.throws(
-    () => new SplitPaymentRequest(20000, 'TRY', 'cuk_1')
-      .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', 10000)
-      .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', 10000)
+    () => new SplitPaymentRequest('20000', 'TRY', 'cuk_1')
+      .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', '10000')
+      .addMethodLeg(PaymentMethod.WALLET, 'PAYCELL_WALLET', '10000')
       .toJSON(),
     /one leg per provider/,
   );
   assert.throws(
-    () => new SplitPaymentRequest(20000, 'TRY', 'cuk_1').addCardLeg('ct_1', 10000).addCardLeg('ct_1', 10000).toJSON(),
+    () => new SplitPaymentRequest('20000', 'TRY', 'cuk_1').addCardLeg('ct_1', '10000').addCardLeg('ct_1', '10000').toJSON(),
     /same card/,
   );
 });
 
 test('3D Secure on a card leg needs callbackUrl; 1 to 5 legs', () => {
   assert.throws(
-    () => new SplitPaymentRequest(10000, 'TRY', 'cuk_1').addCardLeg('ct_1', 10000, { force3D: true }).toJSON(),
+    () => new SplitPaymentRequest('10000', 'TRY', 'cuk_1').addCardLeg('ct_1', '10000', { force3D: true }).toJSON(),
     /callbackUrl is required/,
   );
-  assert.throws(() => new SplitPaymentRequest(10000, 'TRY', 'cuk_1').toJSON(), /1 to 5 legs/);
-  const six = new SplitPaymentRequest(6000, 'TRY', 'cuk_1');
-  for (let i = 0; i < 6; i += 1) six.addCardLeg(`ct_${i}`, 1000);
+  assert.throws(() => new SplitPaymentRequest('10000', 'TRY', 'cuk_1').toJSON(), /1 to 5 legs/);
+  const six = new SplitPaymentRequest('6000', 'TRY', 'cuk_1');
+  for (let i = 0; i < 6; i += 1) six.addCardLeg(`ct_${i}`, '1000');
   assert.throws(() => six.toJSON(), /1 to 5 legs/);
 });
 
@@ -211,7 +211,7 @@ test('a running split payment (HTTP 400 with the status as code) is returned, no
     step: SplitPendingStep.ACTION,
     paymentMethod: 'MOBILE_BILLING',
     providerCode: 'PAYCELL_MOBILE_BILLING',
-    amount: 40000,
+    amount: "40000",
     paymentId: LEG_PAYMENT_ID,
     actionId: 'act_1',
     redirectPath: null,
@@ -294,19 +294,19 @@ test('getSplitPayment and listSplitPayments are bearer GETs; list filters repeat
 test('refundSplitPayment is a signed, keyed POST with amount and reason only', async () => {
   const { client, calls } = makeClient(() => [200, { status: 'success', code: 'SPLIT_REFUND_COMPLETED', data: { status: 'COMPLETED', legs: [] } }]);
 
-  await client.payments.refundSplitPayment(SPLIT_ID, 1500, 'Customer return', 'refund:order-2026-001:1');
+  await client.payments.refundSplitPayment(SPLIT_ID, '1500', 'Customer return', 'refund:order-2026-001:1');
 
   const call = calls.at(-1);
   assert.equal(call.method, 'POST');
   assert.equal(call.url, `https://gw.example.com/api/v1/payments/split/${SPLIT_ID}/refund`);
-  assert.deepEqual(JSON.parse(call.body), { amount: 1500, reason: 'Customer return' });
+  assert.deepEqual(JSON.parse(call.body), { amount: "1500", reason: 'Customer return' });
   assert.equal(call.headers['Idempotency-Key'], 'refund:order-2026-001:1');
   assert.ok(call.headers['X-Signature']);
 
-  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, 1500), /Idempotency-Key is required/);
-  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, 0, null, 'k'), ConfigurationError);
+  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, '1500'), /Idempotency-Key is required/);
+  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, '0', null, 'k'), ConfigurationError);
   await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, 15.5, null, 'k'), ConfigurationError);
-  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, 100, 'x'.repeat(501), 'k'), ConfigurationError);
+  await assert.rejects(client.payments.refundSplitPayment(SPLIT_ID, '100', 'x'.repeat(501), 'k'), ConfigurationError);
 });
 
 test('an incomplete refund throws with the per-leg result', async () => {
@@ -317,7 +317,7 @@ test('an incomplete refund throws with the per-leg result', async () => {
     data: { status: 'PARTIAL', legs: [{ legId: 'l1', status: 'SUCCEEDED' }, { legId: 'l2', status: 'FAILED', errorCode: 'payment.refund.provider_error' }] },
   }]);
   await assert.rejects(
-    client.payments.refundSplitPayment(SPLIT_ID, 1500, null, 'k'),
+    client.payments.refundSplitPayment(SPLIT_ID, '1500', null, 'k'),
     (error) => error instanceof ValidationError && error.code === 'split_pay.refund.incomplete' && error.response.data.legs.length === 2,
   );
 });

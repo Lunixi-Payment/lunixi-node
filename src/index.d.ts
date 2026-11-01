@@ -30,6 +30,8 @@ export interface RequestOptions {
   accept?: string;
   idempotencyKey?: string | null;
   query?: Record<string, string | number | boolean | null | undefined>;
+  /** `false` = one attempt only (no retry after a network error or a 5xx). Default: `maxRetries`. */
+  retry?: boolean;
 }
 
 export interface BinaryResponse {
@@ -74,6 +76,10 @@ export class LunixiClient {
   /** Public reference data (Türkiye address codes for `ADDRESS` fields). */
   readonly reference: ReferenceClient;
   readonly insurance: InsuranceClient;
+  /** Physical POS payments, transactions, reports and end-of-day results (`/api/v1/physical-pos`). */
+  readonly physicalPos: PhysicalPosClient;
+  /** Physical POS stores, registers, terminals, devices, catalog and overview. */
+  readonly physicalPosManagement: PhysicalPosManagementClient;
   readonly tokens: TokenManager;
   readonly api: ApiClient;
   static generateKeyPair(): KeyPair;
@@ -355,7 +361,7 @@ export interface BasketItemInsuranceData {
  */
 export interface BasketItemFields {
   id?: string;
-  price?: number;
+  price?: string;
   name?: string;
   category1?: string;
   category2?: string;
@@ -367,7 +373,7 @@ export interface BasketItemFields {
   /** `false`: no insurance is offered for this item, whatever the other fields say. */
   insuranceEligible?: boolean;
   /** Insured value of one unit, minor units, integer >= 1. Defaults to the unit price. */
-  insuranceValueAmount?: number;
+  insuranceValueAmount?: string;
   insuranceContext?: BasketItemInsuranceContext;
   /** Insurance data for the quote; personal data, stored encrypted by Lunixi only for insurance. */
   insuranceData?: BasketItemInsuranceData;
@@ -406,11 +412,11 @@ export const REMOVED_AMOUNT_FIELDS: readonly ['price', 'paidPrice'];
 
 export class CreateIntentRequest {
   /**
-   * `amount`: the basket total in minor units (integer ≥ 1), without any
+   * `amount`: the basket total in minor units (canonical positive string), without any
    * installment fee; basket item `price` values must add up to it. Anything else
    * throws `ConfigurationError`.
    */
-  constructor(amount: number, currency: string, orderId: string);
+  constructor(amount: string, currency: string, orderId: string);
   withCallbackUrl(value: string): this;
   withDescription(value: string): this;
   withCustomerId(value: string): this;
@@ -525,8 +531,8 @@ export type MethodFieldGroupItem = Record<string, MethodFieldScalar | MethodFiel
 export type MethodFields = Record<string, MethodFieldScalar | MethodFieldObject | MethodFieldGroupItem[]>;
 
 export class DirectMethodPaymentRequest {
-  /** `amount`: the basket total in minor units (integer ≥ 1), without any installment fee. */
-  constructor(amount: number, currency: string, orderId: string);
+  /** `amount`: the basket total in minor units (canonical positive string), without any installment fee. */
+  constructor(amount: string, currency: string, orderId: string);
   /**
    * Pays with a method other than card. `fields` are the provider's `inputFields`
    * values; `providerCode` may be null when `providerSelection` is `OPTIONAL`
@@ -621,8 +627,8 @@ export interface PaymentMethodProvider {
   actionTypes: PaymentActionTypeValue[];
   currencies: string[];
   /** Minor units; null = no limit. */
-  minAmount: number | null;
-  maxAmount: number | null;
+  minAmount: string | null;
+  maxAmount: string | null;
   /** Whether `preauth: true` is accepted with this provider. */
   preauth: boolean;
   inputFields: MethodInputField[];
@@ -652,8 +658,8 @@ export interface PaymentMethodInfo {
   providerSelectionMode: ProviderSelectionModeValue;
   actionTypes: PaymentActionTypeValue[];
   currencies: string[];
-  minAmount: number | null;
-  maxAmount: number | null;
+  minAmount: string | null;
+  maxAmount: string | null;
   preauth: boolean;
   /**
    * Empty for CARD (routing picks the provider). In the order set in your form
@@ -678,7 +684,7 @@ export interface PaymentAction {
   consent?: { required: boolean; url?: string };
   input?: { fields: MethodInputField[] };
   /** Amount the buyer pays including fees and tax (minor units). */
-  charge?: { amount: number; feeTotal: number; taxTotal: number; buyerTotalCharge: number; currency: string };
+  charge?: { amount: string; feeTotal: string; taxTotal: string; buyerTotalCharge: string; currency: string };
   maskedBusinessName?: string;
   stepUpRequired?: true;
   redirect?: { url: string };
@@ -752,7 +758,7 @@ export interface ProviderNoneEligibleDetails {
 /** One note of a promissory-note plan. */
 export interface PromissoryNoteScheduleRow {
   /** Minor units, integer ≥ 1. */
-  amount: number;
+  amount: string;
   /** `YYYY-MM-DD`. */
   dueDate: string;
 }
@@ -805,7 +811,7 @@ export interface PromissoryNote {
   /** 1-based position in the plan. */
   sequence: number;
   /** Minor units. */
-  amount: number;
+  amount: string;
   dueDate: string;
   status: PromissoryNoteStatusValue;
   paidAt: string | null;
@@ -828,7 +834,7 @@ export interface PromissoryNotes {
   rowSerialNumber: string;
   currency: string;
   /** Minor units. */
-  totalAmount: number;
+  totalAmount: string;
   notes: PromissoryNote[];
   /** Only in the answer of `cancelPromissoryNotes()`. */
   cancelResults?: PromissoryNoteCancelOutcome[];
@@ -848,7 +854,7 @@ export interface PromissoryNoteEventData {
 }
 
 export class InstallmentOptionsRequest {
-  constructor(amount: number, currency: string);
+  constructor(amount: string, currency: string);
   withBinOrPan(value: string): this;
   withInstallment(value: number): this;
   withCardBrand(value: string): this;
@@ -1070,9 +1076,9 @@ export interface SplitPaymentCompletion {
 /** `details` of 400 `split_pay.refund.amount_exceeded`. */
 export interface SplitRefundAmountExceededDetails {
   splitPaymentId: string;
-  refundAmount: number;
-  refundableAmount: number;
-  nonRefundableAmount: number;
+  refundAmount: string;
+  refundableAmount: string;
+  nonRefundableAmount: string;
 }
 
 /** Body fields of `POST /payments/split`. */
@@ -1093,17 +1099,17 @@ export interface SplitCardLegOptions {
 
 export class SplitPaymentRequest {
   /** `totalAmount`: minor units, the sum of the leg amounts. `ownerRef`: your customer's card owner key. */
-  constructor(totalAmount: number, currency: string, ownerRef: string);
+  constructor(totalAmount: string, currency: string, ownerRef: string);
   withOrderId(value: string): this;
   withCallbackUrl(value: string): this;
   /** A stored card of `ownerRef`. */
-  addCardLeg(cardToken: string, amount: number, options?: SplitCardLegOptions): this;
+  addCardLeg(cardToken: string, amount: string, options?: SplitCardLegOptions): this;
   /**
    * A non-card leg with the `direct/payment` block. `providerCode` is required
    * (a provider with `splitEligible: true`). Promissory note: `noteCount` in
    * `fields`, no schedule.
    */
-  addMethodLeg(paymentMethod: Exclude<PaymentMethodCode, 'CARD'> | string, providerCode: string, amount: number, fields?: MethodFields): this;
+  addMethodLeg(paymentMethod: Exclude<PaymentMethodCode, 'CARD'> | string, providerCode: string, amount: string, fields?: MethodFields): this;
   /** Checks the body (`ConfigurationError`) and returns it. */
   toJSON(): JsonObject;
 }
@@ -1118,7 +1124,7 @@ export interface SplitPaymentStep {
   providerCode: string | null;
   splitBehavior: SplitBehaviorValue;
   /** Minor units. */
-  amount: number | null;
+  amount: string | null;
   status: SplitLegStatusValue;
   /** Payment record of a non-card leg (`paymentId` of the action endpoints); null for a card or before it starts. */
   paymentId: string | null;
@@ -1135,7 +1141,7 @@ export interface SplitPaymentPendingStep {
   step: SplitPendingStepValue;
   paymentMethod: PaymentMethodCode | string;
   providerCode: string | null;
-  amount: number | null;
+  amount: string | null;
   /** Non-card leg's payment record; null for a card. */
   paymentId: string | null;
   /** Open action (`step: ACTION`). */
@@ -1155,7 +1161,7 @@ export interface SplitPaymentLegSummary {
   paymentMethod?: PaymentMethodCode | string;
   splitBehavior?: SplitBehaviorValue;
   providerCode?: string | null;
-  legAmount?: number;
+  legAmount?: string;
   installmentCount?: number;
   replacesLegId?: string | null;
 }
@@ -1183,7 +1189,7 @@ export interface SplitPaymentResult {
     actionId?: string | null;
     paymentMethod?: string;
     providerCode?: string | null;
-    legAmount?: number;
+    legAmount?: string;
   };
   legs: SplitPaymentLegSummary[];
   steps: SplitPaymentStep[];
@@ -1205,27 +1211,27 @@ export interface SplitPaymentResult {
 export type SplitPaymentResponse = GatewayResponse<SplitPaymentResult>;
 
 export interface SplitPaymentAggregate {
-  totalAmount: number;
-  legsAmount: number;
+  totalAmount: string;
+  legsAmount: string;
   amountsBalanced: boolean;
   legCount: number;
-  capturedAmount: number;
-  authorizedAmount: number;
-  compensatedAmount: number;
-  legStatusBreakdown: Array<{ status: SplitLegStatusValue; count: number; amount: number }>;
+  capturedAmount: string;
+  authorizedAmount: string;
+  compensatedAmount: string;
+  legStatusBreakdown: Array<{ status: SplitLegStatusValue; count: number; amount: string }>;
 }
 
 /** A leg in `getSplitPayment()`. The card token is never returned. */
 export interface SplitPaymentLegDetail {
   id: string;
   sequence: number;
-  legAmount: number;
+  legAmount: string;
   installmentCount: number;
   /** Leg amount plus the installment fee; null before the leg is charged. */
-  chargeAmount: number | null;
+  chargeAmount: string | null;
   /** Refund ceiling of the leg; null before the leg is charged. */
-  capturedAmount: number | null;
-  refundedAmount: number | null;
+  capturedAmount: string | null;
+  refundedAmount: string | null;
   legStatus: SplitLegStatusValue;
   paymentMethod: PaymentMethodCode | string | null;
   providerCode: string | null;
@@ -1234,14 +1240,14 @@ export interface SplitPaymentLegDetail {
   refundState: SplitLegRefundStateValue | null;
   compensationRefund: {
     status: 'PENDING' | 'COMPLETED';
-    amount: number;
+    amount: string;
     attempt: number;
     requestedAt: string | null;
     nextAttemptAt: string | null;
     lastErrorCode: string | null;
     refundedAt: string | null;
   } | null;
-  dispute: { state: string; disputedAmount: number; openChargebackCount: number } | null;
+  dispute: { state: string; disputedAmount: string; openChargebackCount: number } | null;
   cardTokenMasked: string | null;
   cardLast4: string | null;
   cardBrand: string | null;
@@ -1268,9 +1274,9 @@ export interface SplitPaymentDetail extends SplitPaymentListItem {
   ownerRef: string;
   legs: SplitPaymentLegDetail[];
   /** What can still be refunded from the main payment. */
-  refund: { refundableAmount: number; nonRefundableAmount: number; refundedAmount: number };
+  refund: { refundableAmount: string; nonRefundableAmount: string; refundedAmount: string };
   /** Chargebacks on the legs; the main payment's status does not change. */
-  dispute: { hasDispute: boolean; disputedAmount: number; legCount: number };
+  dispute: { hasDispute: boolean; disputedAmount: string; legCount: number };
   [key: string]: unknown;
 }
 
@@ -1302,7 +1308,7 @@ export interface SplitRefundLegResult {
   paymentMethod: PaymentMethodCode | string | null;
   providerCode: string | null;
   /** Minor units refunded from this leg in this request. */
-  amount: number;
+  amount: string;
   status: SplitRefundLegStatusValue;
   errorCode: string | null;
 }
@@ -1315,15 +1321,15 @@ export interface SplitRefundResult {
   orderId: string | null;
   currency: string;
   status: SplitRefundStatusValue;
-  requestedAmount: number;
-  refundedAmount: number;
+  requestedAmount: string;
+  refundedAmount: string;
   /** A completed request repeated with the same key; nothing was sent to the bank. */
   duplicate: boolean;
   legs: SplitRefundLegResult[];
   /** What is left to refund after this request. */
-  refundableAmount: number;
+  refundableAmount: string;
   /** Amount of the non-reversible legs (never refunded). */
-  nonRefundableAmount: number;
+  nonRefundableAmount: string;
 }
 
 export type SplitRefundResponse = GatewayResponse<SplitRefundResult>;
@@ -1364,8 +1370,8 @@ export interface SplitEventLeg {
 export class PaymentClient {
   createIntent(request: CreateIntentRequest | JsonObject, idempotencyKey?: string | null): Promise<CheckoutIntent | CheckoutIntentEnvelope>;
   createMarketplaceIntent(request: JsonObject, idempotencyKey?: string | null): Promise<CheckoutIntent | CheckoutIntentEnvelope>;
-  capture(intentId: string, amount?: number | null, idempotencyKey?: string | null): Promise<JsonObject>;
-  refund(intentId: string, amount?: number | null, reason?: string | null, idempotencyKey?: string | null): Promise<JsonObject>;
+  capture(intentId: string, amount?: string, idempotencyKey?: string | null): Promise<JsonObject>;
+  refund(intentId: string, amount?: string, reason?: string | null, idempotencyKey?: string | null): Promise<JsonObject>;
   void(intentId: string, idempotencyKey?: string | null): Promise<JsonObject>;
   /**
    * `POST /payments/direct/payment`, also the only server-side card charge
@@ -1420,7 +1426,7 @@ export class PaymentClient {
    * required). Incomplete: throws `ValidationError` with code
    * `split_pay.refund.incomplete` and the per-leg result in `response.data`.
    */
-  refundSplitPayment(splitPaymentId: string, amount: number, reason?: string | null, idempotencyKey?: string | null): Promise<SplitRefundResponse>;
+  refundSplitPayment(splitPaymentId: string, amount: string, reason?: string | null, idempotencyKey?: string | null): Promise<SplitRefundResponse>;
   failoverRecoveryAnalytics(filters?: JsonObject): Promise<JsonObject>;
   providerCredentialAnalytics(credentialId: string, filters?: JsonObject): Promise<JsonObject>;
 }
@@ -1517,7 +1523,7 @@ export interface PaymentLinkItemFields {
   name: string;
   description?: string;
   /** Integer, minor units. */
-  unitPriceMinor: number;
+  unitPriceMinor: string;
   minQuantity?: number;
   maxQuantity?: number;
   /** Units available for this line; `null` = unlimited. */
@@ -1580,17 +1586,17 @@ export interface PaymentLinkCheckoutPolicy {
 }
 
 /**
- * The definition of a payment link (REST, camelCase). Amounts are integers in
+ * The definition of a payment link (REST, camelCase). Amounts are canonical strings in
  * minor units. Times are ISO-8601 strings (a `Date` is accepted on input).
  */
 export interface PaymentLinkSpecFields {
   usage: PaymentLinkUsageValue;
   amountMode: PaymentLinkAmountModeValue;
   currency: string;
-  amountMinor?: number | null;
-  minAmountMinor?: number | null;
-  maxAmountMinor?: number | null;
-  suggestedAmountsMinor?: number[];
+  amountMinor?: string;
+  minAmountMinor?: string | null;
+  maxAmountMinor?: string | null;
+  suggestedAmountsMinor?: string[];
   quantityEnabled?: boolean;
   minQuantity?: number;
   maxQuantity?: number;
@@ -1634,7 +1640,7 @@ export interface CreatePaymentLinkBody extends PaymentLinkSpecFields {
 export type PaymentLinkChanges = Partial<Omit<PaymentLinkSpecFields, 'usage' | 'amountMode' | 'currency'>>;
 
 export class PaymentLinkItem {
-  constructor(name: string, unitPriceMinor: number);
+  constructor(name: string, unitPriceMinor: string);
   withItemKey(value: string): this;
   withDescription(value: string): this;
   withQuantityRange(minQuantity: number, maxQuantity: number): this;
@@ -1653,12 +1659,12 @@ export class PaymentLinkCustomField {
 }
 
 export class CreatePaymentLinkRequest {
-  static fixed(usage: PaymentLinkUsageValue, amountMinor: number, currency: string, title: string): CreatePaymentLinkRequest;
+  static fixed(usage: PaymentLinkUsageValue, amountMinor: string, currency: string, title: string): CreatePaymentLinkRequest;
   static open(
     usage: PaymentLinkUsageValue,
     currency: string,
     title: string,
-    amounts: { minAmountMinor: number; maxAmountMinor?: number | null; suggestedAmountsMinor?: number[] | null },
+    amounts: { minAmountMinor: string; maxAmountMinor?: string | null; suggestedAmountsMinor?: string[] | null },
   ): CreatePaymentLinkRequest;
   static itemized(
     usage: PaymentLinkUsageValue,
@@ -1668,10 +1674,10 @@ export class CreatePaymentLinkRequest {
   ): CreatePaymentLinkRequest;
   constructor(usage: PaymentLinkUsageValue, amountMode: PaymentLinkAmountModeValue, currency: string, title: string);
   withEnvironment(value: PaymentLinkEnvironmentValue): this;
-  withAmountMinor(value: number): this;
-  withMinAmountMinor(value: number): this;
-  withMaxAmountMinor(value: number): this;
-  withSuggestedAmountsMinor(values: number[]): this;
+  withAmountMinor(value: string): this;
+  withMinAmountMinor(value: string): this;
+  withMaxAmountMinor(value: string): this;
+  withSuggestedAmountsMinor(values: string[]): this;
   withQuantity(minQuantity: number, maxQuantity: number): this;
   withItems(items: Array<PaymentLinkItem | PaymentLinkItemFields>): this;
   addItem(item: PaymentLinkItem | PaymentLinkItemFields): this;
@@ -1708,8 +1714,8 @@ export class CreatePaymentLinkRequest {
 
 export interface PaymentLinkCounters {
   paidCount: number;
-  collectedAmountMinor: number;
-  refundedAmountMinor: number;
+  collectedAmountMinor: string;
+  refundedAmountMinor: string;
   soldQuantity: number;
   reservedQuantity: number;
   attemptCount: number;
@@ -1771,12 +1777,12 @@ export interface PaymentLinkSummary {
   usage: PaymentLinkUsageValue;
   amountMode: PaymentLinkAmountModeValue;
   currency: string;
-  amountMinor: number | null;
+  amountMinor: string | null;
   title: string;
   reference: string;
   tags: string[];
   paidCount: number;
-  collectedAmountMinor: number;
+  collectedAmountMinor: string;
   expiresAt: string | null;
   createdByType: 'USER' | 'API_KEY' | string;
   createdById: string;
@@ -1791,10 +1797,10 @@ export interface PaymentLinkAttempt {
   state: PaymentLinkAttemptStateValue;
   linkVersion: number;
   paymentId: string | null;
-  amountMinor: number;
+  amountMinor: string;
   currency: string;
   quantity: number;
-  lines: Array<{ itemKey: string; name: string; quantity: number; unitPriceMinor: number; lineTotalMinor: number }>;
+  lines: Array<{ itemKey: string; name: string; quantity: number; unitPriceMinor: string; lineTotalMinor: string }>;
   buyerName: string;
   buyerEmail: string;
   buyerPhone: string;
@@ -1815,9 +1821,9 @@ export interface PaymentLinkPayment {
   attemptId: string;
   paymentId: string;
   paymentStatus: string;
-  amountMinor: number;
-  capturedAmountMinor: number;
-  refundedAmountMinor: number;
+  amountMinor: string;
+  capturedAmountMinor: string;
+  refundedAmountMinor: string;
   currency: string;
   paidAt: string | null;
   buyerEmail: string;
@@ -1981,6 +1987,8 @@ export class ApiError extends LunixiError {
   readonly code: string | null;
   readonly response: unknown;
   readonly requestId: string | null;
+  /** Set on errors of physical POS writes: the `Idempotency-Key` that was sent. */
+  idempotencyKey?: string;
 }
 
 /** 400 — the gateway rejected the body (a value outside a closed dictionary, an unknown field). */
@@ -2006,6 +2014,46 @@ export class RateLimitError extends ApiError {
 export class ServiceUnavailableError extends ApiError {
   readonly retryAfter: number | null;
   readonly quota: QuotaSnapshot | null;
+}
+
+/**
+ * Physical POS — `physical_pos.payment.card_data_rejected`. `field` is the
+ * path only (never the value). `statusCode` 0 = refused by the SDK before sending.
+ */
+export class PhysicalPosCardDataRejectedError extends ValidationError {
+  static readonly CODE: 'physical_pos.payment.card_data_rejected';
+  readonly field: string | null;
+  idempotencyKey?: string;
+}
+
+/**
+ * Physical POS — 409 `physical_pos.payment.void_after_settlement`: the payment is in a device
+ * end-of-day and can no longer be voided; refund it (`REFUND`, new key). `allowedOperation` =
+ * `details.allowedOperation` (`REFUND`).
+ */
+export class PhysicalPosVoidAfterSettlementError extends ApiError {
+  static readonly CODE: 'physical_pos.payment.void_after_settlement';
+  readonly allowedOperation: 'REFUND' | (string & {}) | null;
+  idempotencyKey?: string;
+}
+
+/** Physical POS — 429. `retryAfter` = `Retry-After` header or `details.retryAfterSeconds`. */
+export class PhysicalPosRateLimitError extends RateLimitError {
+  idempotencyKey?: string;
+}
+
+/**
+ * Physical POS — the outcome of a payment write is unknown: an attempt got no
+ * HTTP answer, a 2xx without a payment, or a 5xx that does not say "not
+ * started" (then for the whole call, whatever a later attempt answered — a 429
+ * or 409 included). Call again with the same `idempotencyKey`; a new key can
+ * charge twice. `cause` is the last error.
+ */
+export class PhysicalPosOutcomeUnknownError extends ApiError {
+  idempotencyKey: string;
+  readonly retryAfter: number | null;
+  /** Attempts made by the SDK for this call. */
+  readonly attempts: number | null;
 }
 
 // ───────────────────────────── Fraud ─────────────────────────────
@@ -2235,8 +2283,8 @@ export interface WalletRoute {
 /** Every route the wallet client calls, with the gateway's field and Idempotency-Key rules. */
 export const WALLET_ROUTES: Readonly<Record<string, WalletRoute>>;
 
-/** Minor units as a digit string (`"12550"` = 125.50). A safe non-negative integer number is also accepted. */
-export type WalletAmount = string | number;
+/** Minor units as a digit string (`"12550"` = 125.50). Numeric inputs are rejected. */
+export type WalletAmount = string;
 
 export interface WalletPage<T = JsonObject> {
   items: T[];
@@ -2693,14 +2741,14 @@ export interface BankAccount {
 export interface BankBalance {
   accountId: string;
   currency: string;
-  balanceMinor: number;
-  availableMinor?: number;
-  blockedMinor?: number;
+  balanceMinor: string;
+  availableMinor?: string;
+  blockedMinor?: string;
   asOf?: string;
   /** Available balance excluding the overdraft line (when the bank reports it separately). */
-  availableWithoutOverdraftMinor?: number;
+  availableWithoutOverdraftMinor?: string;
   /** Unused overdraft line (when the bank reports it). */
-  overdraftAvailableMinor?: number;
+  overdraftAvailableMinor?: string;
 }
 
 /** A row of the transaction list. `amountMinor` is positive; `direction` gives the sign. */
@@ -2708,7 +2756,7 @@ export interface BankTransaction {
   transactionId: string;
   accountId: string;
   direction: BankTransactionDirectionValue;
-  amountMinor: number;
+  amountMinor: string;
   currency: string;
   bookedAt?: string;
   valueAt?: string;
@@ -2731,7 +2779,7 @@ export interface BankTransaction {
 
 /** `getTransaction()`: the row plus the detail fields. */
 export interface BankTransactionDetail extends BankTransaction {
-  balanceAfterMinor?: number;
+  balanceAfterMinor?: string;
   documentNo?: string;
   bank: BankRef;
 }
@@ -2754,7 +2802,7 @@ export interface BankAccountTransactionReceivedData {
   bankEftCode: string;
   bankName: string;
   direction: BankTransactionDirectionValue;
-  amountMinor: number;
+  amountMinor: string;
   currency: string;
   bookedAt: string;
   valueAt: string | null;
@@ -2807,8 +2855,8 @@ export interface BankTransactionFilters extends BankConnectPageFilters {
   bookedTo?: string | Date;
   direction?: BankTransactionDirectionValue;
   /** Minor units, inclusive. */
-  minAmountMinor?: number;
-  maxAmountMinor?: number;
+  minAmountMinor?: string;
+  maxAmountMinor?: string;
   canonicalType?: BankTransactionTypeValue | BankTransactionTypeValue[];
 }
 
@@ -2879,7 +2927,7 @@ export interface BankTransfer {
   environment: string;
   status: BankTransferStatusValue;
   rail: BankTransferRailValue | null;
-  amountMinor: number;
+  amountMinor: string;
   currency: string;
   sourceIbanMasked: string | null;
   receiverIbanMasked: string;
@@ -2917,7 +2965,7 @@ export interface BankTransferRequest {
   /** 2–140 characters. */
   receiverName: string;
   /** Integer > 0, minor units (150075 = 1,500.75 TRY). */
-  amountMinor: number;
+  amountMinor: string;
   /** ISO 4217; default TRY. */
   currency?: string;
   /** A code from `transfers.listPurposes()`; none = the bank's default. */
@@ -2971,8 +3019,8 @@ export interface BankFxQuoteRequest {
   /** You buy into this account (same connection, another currency). */
   targetAccountId: string;
   /** Exactly one of the two amounts, minor units of that account's currency. */
-  sourceAmountMinor?: number;
-  targetAmountMinor?: number;
+  sourceAmountMinor?: string;
+  targetAmountMinor?: string;
 }
 
 export interface BankFxQuote {
@@ -2982,12 +3030,12 @@ export interface BankFxQuote {
   targetAccountId: string;
   sourceCurrency: string;
   targetCurrency: string;
-  sourceAmountMinor: number;
-  targetAmountMinor: number;
+  sourceAmountMinor: string;
+  targetAmountMinor: string;
   requestedSide: BankFxRequestedSideValue;
   /** Decimal string. */
   appliedRate: string;
-  taxAmountMinor: number | null;
+  taxAmountMinor: string | null;
   /** Use the quote before this time. */
   expiresAt: string | null;
   validForSeconds: number;
@@ -3010,8 +3058,8 @@ export interface BankFxOrder {
   targetAccountId: string;
   sourceCurrency: string;
   targetCurrency: string;
-  sourceAmountMinor: number;
-  targetAmountMinor: number;
+  sourceAmountMinor: string;
+  targetAmountMinor: string;
   appliedRate: string;
   description: string | null;
   idempotencyKey: string;
@@ -3020,8 +3068,8 @@ export interface BankFxOrder {
   failureCode: string | null;
   outcomeUnknown: boolean;
   initiatedVia: BankTransferInitiatedViaValue;
-  sourceBalanceAfterMinor: number | null;
-  targetBalanceAfterMinor: number | null;
+  sourceBalanceAfterMinor: string | null;
+  targetBalanceAfterMinor: string | null;
   createdAt: string | null;
   submittedAt: string | null;
   completedAt: string | null;
@@ -3048,7 +3096,7 @@ export interface BankTransferWebhookData {
   bankName: string;
   status: BankTransferStatusValue;
   rail: BankTransferRailValue | null;
-  amountMinor: number;
+  amountMinor: string;
   currency: string;
   receiverIbanMasked: string;
   receiverNameMasked: string;
@@ -3360,7 +3408,7 @@ export interface SanctionTransactionAccount {
 export interface SanctionScreenTransactionRequest {
   transactionType?: string;
   direction?: string;
-  amount?: number;
+  amount?: string;
   currency?: string;
   channel?: string;
   occurredAt?: string;
@@ -3923,7 +3971,7 @@ export interface InsuranceQuoteOption {
   schemaVersion: number;
   title: string | null;
   /** Minor units. */
-  premiumAmount: number;
+  premiumAmount: string;
   currency: string;
   premiumCollectedBy: InsurancePremiumCollectedByValue;
   provider: InsuranceProvider;
@@ -4000,7 +4048,7 @@ export interface InsuranceOrder {
   paymentMode: InsurancePaymentModeValue;
   premiumCollectedBy: InsurancePremiumCollectedByValue;
   /** Minor units. */
-  premiumAmount: number;
+  premiumAmount: string;
   currency: string;
   paymentIntentId: string | null;
   merchantOrderId: string | null;
@@ -4048,7 +4096,7 @@ export interface InsuranceExternalPayment {
   /** 1–128 printable ASCII characters. */
   externalPaymentId: string;
   /** Minor units; must equal the order's premium. */
-  paidAmount: number;
+  paidAmount: string;
   /** Must equal the order's currency. */
   paidCurrency: string;
   /** ISO 8601 with a time zone, not in the future. */
@@ -4089,18 +4137,18 @@ export interface InsuranceReconciliationExportFilters extends InsuranceReconcili
 /** Minor-unit totals of one reconciliation group. In force = ISSUED or CANCEL_PENDING; open refund = REQUIRED, PENDING or FAILED. */
 export interface InsuranceReconciliationTotals {
   orderCount: number;
-  premiumAmount: number;
+  premiumAmount: string;
   collectedOrderCount: number;
-  collectedPremiumAmount: number;
+  collectedPremiumAmount: string;
   policyCount: number;
   inForcePolicyCount: number;
-  inForcePremiumAmount: number;
+  inForcePremiumAmount: string;
   cancelledPolicyCount: number;
-  cancelledPremiumAmount: number;
+  cancelledPremiumAmount: string;
   refundedOrderCount: number;
-  refundedPremiumAmount: number;
+  refundedPremiumAmount: string;
   refundOpenOrderCount: number;
-  refundOpenPremiumAmount: number;
+  refundOpenPremiumAmount: string;
 }
 
 export interface InsuranceReconciliationSummary {
@@ -4125,7 +4173,7 @@ export interface InsuranceReconciliationOrder {
   providerCode: string;
   premiumCollectedBy: InsurancePremiumCollectedByValue;
   paymentMode: InsurancePaymentModeValue;
-  premiumAmount: number;
+  premiumAmount: string;
   currency: string;
   collectionStatus: InsuranceCollectionStatusValue;
   policyStatus: InsurancePolicyStatusValue;
@@ -4138,7 +4186,7 @@ export interface InsuranceReconciliationOrder {
     basketItemId: string;
     policyNumber: string | null;
     policyStatus: InsurancePolicyStatusValue;
-    premiumAmount: number;
+    premiumAmount: string;
     cancelledAt: string | null;
   }>;
 }
@@ -4181,7 +4229,7 @@ export interface InsuranceWebhookData {
   refundStatus: InsuranceRefundStatusValue;
   documentStatus: InsuranceDocumentStatusValue;
   /** Minor units. */
-  premiumAmount: number;
+  premiumAmount: string;
   currency: string;
   policies: InsuranceWebhookPolicy[];
   /** Only on `insurance.policy.failed` and `insurance.refund.required`. */
@@ -4259,3 +4307,963 @@ export class InsuranceClient {
     fields: { name: string; category1: string; category2?: string },
   ): BasketItem;
 }
+
+// ───────────────────────────── Physical POS ─────────────────────────────
+
+export declare const PhysicalPosPaymentOperation: {
+  readonly SALE: 'SALE';
+  readonly PREAUTH_OPEN: 'PREAUTH_OPEN';
+  readonly REFUND_UNMATCHED: 'REFUND_UNMATCHED';
+  readonly VOID: 'VOID';
+  readonly REFUND: 'REFUND';
+  readonly PREAUTH_CLOSE: 'PREAUTH_CLOSE';
+  readonly PREAUTH_CANCEL: 'PREAUTH_CANCEL';
+};
+export type PhysicalPosRootOperationValue = 'SALE' | 'PREAUTH_OPEN' | 'REFUND_UNMATCHED';
+export type PhysicalPosReversalOperationValue = 'VOID' | 'REFUND' | 'PREAUTH_CLOSE' | 'PREAUTH_CANCEL';
+/** Open set on the wire: a value the SDK does not list may appear. */
+export type PhysicalPosPaymentOperationValue = PhysicalPosRootOperationValue | PhysicalPosReversalOperationValue | (string & {});
+
+export declare const PhysicalPosPaymentStatus: {
+  readonly NOT_STARTED: 'NOT_STARTED';
+  readonly IN_PROGRESS: 'IN_PROGRESS';
+  readonly APPROVED: 'APPROVED';
+  readonly PARTIALLY_APPROVED: 'PARTIALLY_APPROVED';
+  readonly DECLINED: 'DECLINED';
+  readonly CANCELLED: 'CANCELLED';
+  readonly EXPIRED: 'EXPIRED';
+  readonly FAILED: 'FAILED';
+  readonly UNKNOWN: 'UNKNOWN';
+  readonly MANUAL_REVIEW: 'MANUAL_REVIEW';
+};
+export type PhysicalPosPaymentStatusValue = (typeof PhysicalPosPaymentStatus)[keyof typeof PhysicalPosPaymentStatus] | (string & {});
+
+export declare const PhysicalPosReversalStatus: {
+  readonly NONE: 'NONE';
+  readonly PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED';
+  readonly REFUNDED: 'REFUNDED';
+  readonly VOIDED: 'VOIDED';
+  readonly PREAUTH_CLOSED: 'PREAUTH_CLOSED';
+  readonly PREAUTH_CANCELLED: 'PREAUTH_CANCELLED';
+  readonly PREAUTH_EXPIRED: 'PREAUTH_EXPIRED';
+};
+export type PhysicalPosReversalStatusValue = (typeof PhysicalPosReversalStatus)[keyof typeof PhysicalPosReversalStatus] | (string & {});
+
+export declare const PhysicalPosEvents: {
+  readonly PAYMENT_APPROVED: 'physical_pos.payment.approved';
+  readonly PAYMENT_PARTIALLY_APPROVED: 'physical_pos.payment.partially_approved';
+  readonly PAYMENT_DECLINED: 'physical_pos.payment.declined';
+  readonly PAYMENT_CANCELLED: 'physical_pos.payment.cancelled';
+  readonly PAYMENT_EXPIRED: 'physical_pos.payment.expired';
+  readonly PAYMENT_FAILED: 'physical_pos.payment.failed';
+  readonly PAYMENT_UNKNOWN: 'physical_pos.payment.unknown';
+  readonly PAYMENT_MANUAL_REVIEW: 'physical_pos.payment.manual_review';
+  /** A sale made directly on the device (`origin: "DEVICE_DIRECT"`), recorded already approved. */
+  readonly PAYMENT_DEVICE_SALE: 'physical_pos.payment.device_sale';
+  readonly FISCAL_DOCUMENT_ISSUED: 'physical_pos.fiscal_document.issued';
+  readonly FISCAL_DOCUMENT_FAILED: 'physical_pos.fiscal_document.failed';
+  readonly FISCAL_DOCUMENT_CANCELLED: 'physical_pos.fiscal_document.cancelled';
+  readonly FISCAL_DOCUMENT_ACTION_REQUIRED: 'physical_pos.fiscal_document.action_required';
+};
+export type PhysicalPosEventType = (typeof PhysicalPosEvents)[keyof typeof PhysicalPosEvents];
+export declare const PHYSICAL_POS_EVENT_PATTERN: 'physical_pos.*';
+export declare const PHYSICAL_POS_EVENT_TYPES: readonly PhysicalPosEventType[];
+/** Field kinds per request (`string`, `int`, `bool`, `strings`, `rowVersion`, …; `*` required, `?` nullable). */
+export declare const PHYSICAL_POS_REQUEST_FIELDS: Readonly<Record<string, Readonly<Record<string, string>>>>;
+/** Query parameters per route. */
+export declare const PHYSICAL_POS_FILTERS: Readonly<Record<string, readonly string[]>>;
+
+/** Exactly one form: `{ deviceId }`, `{ vendorCode, serialNumber }` or `{ externalRef }` (the device's own reference). */
+export interface PhysicalPosPaymentTarget {
+  deviceId?: string;
+  /** PAVO, CASTLES or PLUSPAY; required with `serialNumber`. */
+  vendorCode?: string;
+  serialNumber?: string;
+  externalRef?: string;
+}
+
+/** Sale line. Price includes all taxes; the tax breakdown is computed by Lunixi from `taxGroupCode`. */
+export interface PhysicalPosSaleItem {
+  /** 1…500, starting at 1 without gaps. */
+  lineNo: number;
+  name: string;
+  /** Quantity × 1000 (1.5 kg = 1500). */
+  quantityMilli: number;
+  /** GİB unit code (C62, KGM, LTR …). */
+  unitCode: string;
+  unitPriceMinor: string;
+  /** Lunixi tax group (KDV20, KDV10, KDV1, KDV0_350 …). */
+  taxGroupCode: string;
+  /** ROUND_HALF_UP(quantityMilli × unitPriceMinor / 1000); Σ lineTotalMinor = amountMinor. */
+  lineTotalMinor: string;
+  /** GTIN-8/12/13/14 with a valid check digit. */
+  barcode?: string | null;
+}
+
+/**
+ * Starts a payment. There is no card field: the card is read on the device.
+ * Amounts are canonical integer strings in minor units (kuruş for TRY).
+ */
+export interface PhysicalPosCreatePaymentRequest {
+  operation: PhysicalPosRootOperationValue | (string & {});
+  target: PhysicalPosPaymentTarget;
+  amountMinor: string;
+  currency: string;
+  /** null / 0 = single payment; 2–36 (SALE only). */
+  installmentCount?: number | null;
+  /** Default CARD. */
+  instrument?: string | null;
+  /** ≤ 128 printable ASCII characters without spaces. */
+  merchantReference?: string | null;
+  allowDuplicateReference?: boolean;
+  /** 5–30 seconds (default 30). */
+  startTimeoutSeconds?: number | null;
+  /** Explicit bank row (`listTerminalAcquirers()` row id); left out, the device chooses. */
+  terminalAcquirerId?: string | null;
+  /** SALE only; leave out for a sale without items. */
+  items?: PhysicalPosSaleItem[];
+}
+
+export interface PhysicalPosRefundItem {
+  lineNo: number;
+  quantityMilli: number;
+  /** Optional confirmation; must equal the line amount derived by Lunixi. */
+  amountMinor?: string;
+}
+
+export interface PhysicalPosReversalRequest {
+  operation: PhysicalPosReversalOperationValue | (string & {});
+  /** Required for REFUND (without items) and PREAUTH_CLOSE; leave out for VOID and PREAUTH_CANCEL. */
+  amountMinor?: string;
+  /** The original payment's currency. */
+  currency: string;
+  merchantReference?: string | null;
+  startTimeoutSeconds?: number | null;
+  /** REFUND only: refund on another device of yours. */
+  target?: PhysicalPosPaymentTarget | null;
+  /** REFUND only: item based refund. */
+  items?: PhysicalPosRefundItem[];
+}
+
+export interface PhysicalPosTender {
+  tenderStatus: string;
+  /** First 6 + last 4, or last 4 only. */
+  cardMasked: string | null;
+  cardBrand: string | null;
+  entryMode: string | null;
+  acquirerCode: string | null;
+  authCode: string | null;
+  rrn: string | null;
+}
+
+export interface PhysicalPosItemTax {
+  taxType: string;
+  taxMode: string;
+  rateBp: number | null;
+  unitAmountMinor: string | null;
+  baseMinor: string;
+  amountMinor: string;
+  reasonCode: string | null;
+  refundedAmountMinor: string;
+  reservedAmountMinor: string;
+}
+
+export interface PhysicalPosPaymentItem {
+  lineNo: number;
+  name: string;
+  quantityMilli: number;
+  unitCode: string;
+  unitPriceMinor: string;
+  taxGroupCode: string;
+  lineTotalMinor: string;
+  netMinor: string;
+  refundedQuantityMilli: number;
+  refundedMinor: string;
+  reservedQuantityMilli: number;
+  reservedMinor: string;
+  /** NONE / PARTIAL / FULL — approved item based refunds only; money truth is the root's `reversedMinor`. */
+  refundStatus: string;
+  taxes: PhysicalPosItemTax[];
+  barcode: string | null;
+}
+
+export interface PhysicalPosRefundItemView {
+  lineNo: number;
+  name: string;
+  unitCode: string;
+  unitPriceMinor: string;
+  taxGroupCode: string;
+  quantityMilli: number;
+  amountMinor: string;
+  netMinor: string;
+  taxes: Array<{ taxType: string; baseMinor: string; amountMinor: string }>;
+}
+
+export interface PhysicalPosPayment {
+  paymentId: string;
+  rootPaymentId: string;
+  /** null = root payment. */
+  originalPaymentId: string | null;
+  origin: 'API' | 'DEVICE_DIRECT' | (string & {});
+  operation: PhysicalPosPaymentOperationValue;
+  paymentStatus: PhysicalPosPaymentStatusValue;
+  /** Open set; decide on `paymentStatus`. */
+  statusReason: string | null;
+  outcomeConflict: boolean;
+  /** Under manual review and resolvable in the panel. */
+  resolvable: boolean;
+  deviceId: string;
+  logicalTerminalId: string | null;
+  terminalAcquirerId: string | null;
+  channel: string;
+  vendorReference: string | null;
+  amountMinor: string;
+  approvedAmountMinor: string | null;
+  currency: string;
+  installmentCount: number | null;
+  instrument: string;
+  merchantReference: string | null;
+  reversedMinor: string;
+  capturedMinor: string;
+  reversalReservedMinor: string;
+  pendingReversalId: string | null;
+  reversalStatus: PhysicalPosReversalStatusValue;
+  expiresAt: string | null;
+  resultDeadlineAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  rowVersion: number;
+  historySeq: number;
+  tender: PhysicalPosTender | null;
+  /** Filled by `getPayment()` only. */
+  items: PhysicalPosPaymentItem[];
+  /** Filled by `getPayment()` only, for an item based refund. */
+  refundItems: PhysicalPosRefundItemView[];
+}
+
+/** 202 = accepted (new), 200 = replay of the same key and body (current view). */
+export interface PhysicalPosPaymentWriteResult {
+  payment: PhysicalPosPayment;
+  replayed: boolean;
+  statusCode: number;
+  /** The key sent — retry an unknown outcome with it. */
+  idempotencyKey: string;
+}
+
+export interface PhysicalPosPage<T> {
+  items: T[];
+  hasMore: boolean;
+  /** Opaque — pass back verbatim as `cursor`. */
+  nextCursor: string | null;
+  /** Only with `includeTotal: true` on entity lists. */
+  totalCount: number | null;
+}
+
+export interface PhysicalPosPageFilters {
+  /** 1–100 (default 25). */
+  limit?: number;
+  cursor?: string;
+}
+
+export interface PhysicalPosPaymentFilters extends PhysicalPosPageFilters {
+  deviceId?: string;
+  paymentStatus?: string;
+  /** ISO-8601 UTC ending with Z (default now − 31 days; window ≤ 93 days). A Date is sent as `toISOString()`. */
+  createdFrom?: string | Date;
+  createdTo?: string | Date;
+  /** Exact match. */
+  merchantReference?: string;
+}
+
+export interface PhysicalPosTransactionFilters extends PhysicalPosPaymentFilters {
+  storeId?: string;
+  registerId?: string;
+  amountFromMinor?: string;
+  amountToMinor?: string;
+  origin?: 'API' | 'DEVICE_DIRECT' | (string & {});
+  operation?: PhysicalPosRootOperationValue | (string & {});
+}
+
+export interface PhysicalPosAmbiguousFilters extends PhysicalPosPageFilters {
+  deviceId?: string;
+  /** UNKNOWN or MANUAL_REVIEW. */
+  paymentStatus?: string;
+}
+
+export interface PhysicalPosTransactionTree {
+  root: PhysicalPosPayment;
+  /** Oldest first, at most 50. */
+  children: PhysicalPosPayment[];
+  childrenTruncated: boolean;
+  itemSummary: { lineCount: number; refundStatus: string; refundedMinor: string };
+  storeId: string | null;
+  registerId: string | null;
+}
+
+export interface PhysicalPosTimelineEntry {
+  kind: 'PAYMENT' | 'COMMAND' | 'FISCAL_DOCUMENT' | (string & {});
+  paymentId: string;
+  commandId: string | null;
+  commandType: string | null;
+  seq: number;
+  eventType: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  reasonCode: string | null;
+  source: string;
+  actorType: string;
+  evidenceStrength: string;
+  occurredAt: string | null;
+  recordedAt: string;
+}
+
+export interface PhysicalPosTransactionDetail {
+  requestedPaymentId: string;
+  root: PhysicalPosPayment;
+  children: PhysicalPosPayment[];
+  /** Oldest first; the newest 500 rows. */
+  timeline: PhysicalPosTimelineEntry[];
+  timelineTruncated: boolean;
+  childrenTruncated: boolean;
+  storeId: string | null;
+  registerId: string | null;
+}
+
+export interface PhysicalPosReportFilters {
+  /**
+   * Business day YYYY-MM-DD (Europe/Istanbul), inclusive. A Date is sent as its own
+   * local calendar day (no conversion to Europe/Istanbul); pass the string to be exact.
+   */
+  dateFrom?: string | Date;
+  dateTo?: string | Date;
+  deviceId?: string;
+  storeId?: string;
+}
+
+export interface PhysicalPosSalesSummaryFilters extends PhysicalPosReportFilters {
+  groupBy?: 'DAY' | 'STORE' | 'DEVICE' | 'INSTRUMENT';
+}
+
+export interface PhysicalPosSalesSummary {
+  environment: string;
+  dateFrom: string;
+  dateTo: string;
+  groupBy: string;
+  rows: Array<{
+    /** Day, store id (null = unassigned device), device id or instrument. */
+    groupKey: string | null;
+    currency: string;
+    saleCount: number;
+    saleMinor: string;
+    refundCount: number;
+    refundMinor: string;
+    voidCount: number;
+    voidMinor: string;
+    netMinor: string;
+    ambiguousCount: number;
+  }>;
+}
+
+export interface PhysicalPosAmountTotals {
+  saleCount: number;
+  saleMinor: string;
+  refundCount: number;
+  refundMinor: string;
+  voidCount: number;
+  voidMinor: string;
+}
+
+export interface PhysicalPosTaxSummary {
+  environment: string;
+  dateFrom: string;
+  dateTo: string;
+  rows: Array<{
+    taxType: string;
+    /** null = fixed amount tax. */
+    rateBp: number | null;
+    currency: string;
+    saleBaseMinor: string;
+    saleTaxMinor: string;
+    refundBaseMinor: string;
+    refundTaxMinor: string;
+    voidBaseMinor: string;
+    voidTaxMinor: string;
+    netBaseMinor: string;
+    netTaxMinor: string;
+  }>;
+  amountTotals: Array<PhysicalPosAmountTotals & { currency: string; scope: 'ITEMIZED' | 'ITEMLESS' | (string & {}); netMinor: string }>;
+}
+
+export interface PhysicalPosSettlementFilters extends PhysicalPosPageFilters {
+  deviceId?: string;
+  lineStatus?: 'MATCHED' | 'MISMATCH' | 'UNMAPPED';
+  createdFrom?: string | Date;
+  createdTo?: string | Date;
+}
+
+export interface PhysicalPosSettlementLine {
+  /** End-of-day taken with a Lunixi command: the command id; `null` for one started on the device. */
+  commandId: string | null;
+  /** End-of-day started on the device: the device's end-of-day id; `null` for one taken with a command. */
+  settlementRef: string | null;
+  /** The device's line number (may have gaps). */
+  lineNo: number;
+  deviceId: string;
+  acquirerCode: string | null;
+  /** The bank code the device reported, as is (also on `UNMAPPED` lines). */
+  acquirerRefRaw: string | null;
+  /** The bank's display name; `null` when the bank was not recognised. */
+  acquirerName: string | null;
+  /** The device's current display name. */
+  deviceName: string | null;
+  batchNo: string | null;
+  bankTerminalNumber: string | null;
+  currency: string;
+  lineStatus: string;
+  reported: PhysicalPosAmountTotals;
+  system: PhysicalPosAmountTotals;
+  /** Reported − system; may be negative. */
+  difference: PhysicalPosAmountTotals;
+  periodFrom: string;
+  periodTo: string;
+  deviceClosedAt: string | null;
+  recordedAt: string;
+}
+
+/** The original payment of a reversal event. */
+export interface PhysicalPosWebhookOriginal {
+  /** The root payment (same as `rootPaymentId`). */
+  paymentId: string;
+  /** `API` (started through the API or panel) or `DEVICE_DIRECT` (made on the device). */
+  origin: 'API' | 'DEVICE_DIRECT' | (string & {});
+}
+
+/** `physical_pos.payment.*` payload. Amounts are STRINGS in minor units. */
+export interface PhysicalPosPaymentWebhookData {
+  paymentId: string;
+  rootPaymentId: string;
+  /** On a reversal (void, refund, pre-authorisation close / cancel) the original payment; `null` on a root. */
+  original: PhysicalPosWebhookOriginal | null;
+  operation: string;
+  paymentStatus: string;
+  statusReason: string | null;
+  amountMinor: string;
+  approvedAmountMinor: string | null;
+  currency: string;
+  installmentCount: number | null;
+  deviceId: string;
+  merchantReference: string | null;
+  tender: { cardMasked: string | null; cardBrand: string | null; entryMode: string | null } | null;
+  historySeq: number;
+  /** `MERCHANT` when resolved in the panel. */
+  resolvedBy: 'MERCHANT' | null;
+}
+
+/**
+ * `physical_pos.payment.device_sale` payload: a sale made directly on the device. Same fields as a
+ * payment event (`operation` `SALE`, `paymentStatus` `APPROVED`, `original` / `merchantReference` /
+ * `statusReason` `null`, `historySeq` 1) plus its source and the device's sale time.
+ */
+export interface PhysicalPosDeviceSaleWebhookData extends PhysicalPosPaymentWebhookData {
+  origin: 'DEVICE_DIRECT';
+  /** When the sale was made on the device (ISO-8601 UTC, ms); can be earlier than `createdAt`. */
+  deviceOccurredAt: string;
+}
+
+export interface PhysicalPosWebhookEvent<TData = JsonObject> {
+  id: string | null;
+  type: string;
+  category: 'payment' | 'fiscal_document' | 'other';
+  environment: string | null;
+  createdAt: string | null;
+  /** Increases per payment; ignore an event not newer than the last one applied. */
+  historySeq: number | null;
+  /** `data.original` when it carries `paymentId` and `origin`; `null` on a root payment. */
+  original: PhysicalPosWebhookOriginal | null;
+  /** `true` for `physical_pos.payment.device_sale`. */
+  isDeviceSale: boolean;
+  data: TData;
+  raw: JsonObject;
+}
+
+/**
+ * Verifies the signature with `WebhookVerifier` and reads the `physical_pos.*` event
+ * (`data`, or `payloadJson`). Pass the exact raw body, the headers and your secret
+ * (or a `WebhookVerifier`); a decoded envelope is never accepted.
+ */
+export function parsePhysicalPosWebhookEvent(
+  rawBody: string | Buffer,
+  headers: Record<string, string | string[] | undefined>,
+  secretOrVerifier: string | WebhookVerifier,
+  options?: WebhookVerifierOptions,
+): PhysicalPosWebhookEvent;
+
+/** 5xx codes after which nothing was written (the payment did not start). */
+export declare const PHYSICAL_POS_NOT_STARTED_CODES: readonly string[];
+
+export class PhysicalPosClient {
+  constructor(api: ApiClient);
+  /** A new `Idempotency-Key` (UUID v4); store it with your order before calling. */
+  static newIdempotencyKey(): string;
+  /**
+   * 202 new / 200 replay. `idempotencyKey` is required: store it first, and after
+   * `PhysicalPosOutcomeUnknownError` call again with the SAME key.
+   */
+  createPayment(request: PhysicalPosCreatePaymentRequest, idempotencyKey: string): Promise<PhysicalPosPaymentWriteResult>;
+  createReversal(paymentId: string, request: PhysicalPosReversalRequest, idempotencyKey: string): Promise<PhysicalPosPaymentWriteResult>;
+  /** 200; cancelled only when `paymentStatus` is EXPIRED with MERCHANT_CANCELLED_BEFORE_DISPATCH. */
+  cancelPayment(paymentId: string, idempotencyKey?: string | null): Promise<PhysicalPosPaymentWriteResult>;
+  getPayment(paymentId: string): Promise<PhysicalPosPayment>;
+  listPayments(filters?: PhysicalPosPaymentFilters): Promise<PhysicalPosPage<PhysicalPosPayment>>;
+  iteratePayments(filters?: PhysicalPosPaymentFilters): AsyncGenerator<PhysicalPosPayment, void, void>;
+  listTransactions(filters?: PhysicalPosTransactionFilters): Promise<PhysicalPosPage<PhysicalPosTransactionTree>>;
+  iterateTransactions(filters?: PhysicalPosTransactionFilters): AsyncGenerator<PhysicalPosTransactionTree, void, void>;
+  getTransaction(paymentId: string): Promise<PhysicalPosTransactionDetail>;
+  listAmbiguousPayments(filters?: PhysicalPosAmbiguousFilters): Promise<PhysicalPosPage<PhysicalPosPayment>>;
+  iterateAmbiguousPayments(filters?: PhysicalPosAmbiguousFilters): AsyncGenerator<PhysicalPosPayment, void, void>;
+  getSalesSummary(filters?: PhysicalPosSalesSummaryFilters): Promise<PhysicalPosSalesSummary>;
+  getTaxSummary(filters?: PhysicalPosReportFilters): Promise<PhysicalPosTaxSummary>;
+  listSettlements(filters?: PhysicalPosSettlementFilters): Promise<PhysicalPosPage<PhysicalPosSettlementLine>>;
+  iterateSettlements(filters?: PhysicalPosSettlementFilters): AsyncGenerator<PhysicalPosSettlementLine, void, void>;
+  static parseWebhookEvent(
+    rawBody: string | Buffer,
+    headers: Record<string, string | string[] | undefined>,
+    secretOrVerifier: string | WebhookVerifier,
+    options?: WebhookVerifierOptions,
+  ): PhysicalPosWebhookEvent;
+}
+
+// Management
+
+export interface PhysicalPosImage {
+  assetId: string;
+  url: string;
+}
+
+export interface PhysicalPosStore {
+  id: string;
+  code: string;
+  name: string;
+  city: string | null;
+  district: string | null;
+  addressLine: string | null;
+  timezone: string;
+  storeStatus: 'ACTIVE' | 'ARCHIVED' | (string & {});
+  externalRef: string | null;
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PhysicalPosStoreListItem extends PhysicalPosStore {
+  /** Active registers. */
+  registerCount: number;
+}
+
+export interface PhysicalPosRegister {
+  id: string;
+  storeId: string;
+  code: string;
+  name: string;
+  registerStatus: 'ACTIVE' | 'ARCHIVED' | (string & {});
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PhysicalPosAuditEvent {
+  id: string;
+  action: string;
+  actorType: string;
+  actorId: string;
+  reasonCode: string | null;
+  changes: Record<string, string | number | boolean | null>;
+  requestId: string | null;
+  createdAt: string;
+}
+
+export interface PhysicalPosTerminalAuditEvent {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorType: string;
+  actorId: string;
+  reasonCode: string | null;
+  changes: JsonObject;
+  environment: string | null;
+  createdAt: string;
+}
+
+export interface PhysicalPosTerminal {
+  id: string;
+  terminalCode: string;
+  displayName: string;
+  environment: string;
+  vendorCode: string | null;
+  virtualSerial: string | null;
+  vendorTerminalRef: string | null;
+  ownershipStatus: string;
+  terminalStatus: 'ACTIVE' | 'SUSPENDED' | 'CLOSED' | (string & {});
+  linkedDevice: {
+    linkId: string;
+    deviceId: string;
+    displayName: string | null;
+    serialNumber: string;
+    lifecycleStatus: string;
+    linkedAt: string;
+  } | null;
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+export interface PhysicalPosTerminalDetail extends PhysicalPosTerminal {
+  verifiedAt: string | null;
+  verifiedVia: string | null;
+  verificationEvidence: Array<{
+    evidenceId: string;
+    evidenceType: string;
+    strength: string;
+    deviceId: string | null;
+    deviceKeyId: string | null;
+    createdAt: string;
+    revokedAt: string | null;
+    revokeReason: string | null;
+  }>;
+}
+
+export interface PhysicalPosTerminalAcquirer {
+  /** Pass as `terminalAcquirerId` to choose this bank row for a payment. */
+  id: string;
+  terminalId: string;
+  environment: string;
+  vendorAcquirerRef: string;
+  acquirerCode: string | null;
+  acquirerDisplayName: string | null;
+  mappingStatus: string;
+  merchantNumber: string;
+  terminalNumber: string;
+  label: string | null;
+  currencies: string[];
+  verificationStatus: string;
+  source: string;
+  acquirerStatus: string;
+  lastSyncedAt: string | null;
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PhysicalPosDeviceLink {
+  id: string;
+  terminalId: string;
+  deviceId: string;
+  validFrom: string;
+  validTo: string | null;
+  reasonCode: string;
+  createdByType: string;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface PhysicalPosRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface PhysicalPosDeviceSummary {
+  id: string;
+  displayName: string | null;
+  vendorCode: string;
+  modelId: string;
+  modelDisplayName: string;
+  modelImage: PhysicalPosImage | null;
+  vendorFallbackImage: PhysicalPosImage | null;
+  deviceType: string;
+  formFactor: string;
+  serialNumber: string;
+  environment: string;
+  lifecycleStatus: string;
+  ownershipStatus: string;
+  integrationChannel: string;
+  appMode: string | null;
+  store: PhysicalPosRef | null;
+  register: PhysicalPosRef | null;
+  logicalTerminal: { id: string; code: string } | null;
+  createdAt: string;
+}
+
+export interface PhysicalPosDevice extends PhysicalPosDeviceSummary {
+  vendorDeviceRef: string;
+  channelVariant: string | null;
+  externalRef: string | null;
+  hardwareManufacturer: string | null;
+  hardwareModel: string | null;
+  verifiedAt: string | null;
+  verifiedVia: string | null;
+  vendorAccount: { id: string; label: string } | null;
+  firstActivatedAt: string | null;
+  retiredAt: string | null;
+  source: string;
+  fieldSources: Record<string, string>;
+  drift: Array<{ field: string; source: string; observedAt: string }>;
+  activeKey: { keyId: string; activatedAt: string; enrolledVia: string | null; fingerprint: string | null } | null;
+  openActivationCode: { expiresAt: string } | null;
+  rowVersion: number;
+  updatedAt: string;
+  /** Connection status and readiness for payment; filled in on `getDevice()` only, `null` in write results. */
+  presence: PhysicalPosDevicePresence | null;
+}
+
+/**
+ * Why a device is not ready for payment. Device-side reasons (`NEVER_SEEN`, `DISCONNECTED`, `STALE`,
+ * `APP_UNHEALTHY`, `PAYMENT_APP_UNREACHABLE`) give `409 physical_pos.payment.device_offline` when a
+ * payment starts; the others mean Lunixi cannot verify the status (`503 physical_pos.presence.unavailable`).
+ * Open set.
+ */
+export type PhysicalPosNotReadyReason =
+  | 'NEVER_SEEN'
+  | 'DISCONNECTED'
+  | 'STALE'
+  | 'APP_UNHEALTHY'
+  | 'PAYMENT_APP_UNREACHABLE'
+  | 'WARMING_UP'
+  | 'PRESENCE_DISABLED'
+  | 'LINK_NOT_CONFIGURED'
+  | 'LINK_DOWN'
+  | 'STORE_UNAVAILABLE'
+  | 'RECORD_LOST'
+  | 'TENANT_MISMATCH'
+  | (string & {});
+
+/** `device.presence` — the device's status at the moment of the request. */
+export interface PhysicalPosDevicePresence {
+  connectionState: 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | (string & {});
+  lastSeenAt: string | null;
+  stateChangedAt: string | null;
+  /** `WILL` (connection dropped), `GOODBYE` (closed by the device) or `TIMEOUT` (no signal in time). */
+  offlineReason: 'WILL' | 'GOODBYE' | 'TIMEOUT' | (string & {}) | null;
+  appVersion: string | null;
+  appHealthy: boolean | null;
+  paymentAppReachable: boolean | null;
+  /** Ready as far as the connection and the apps on the device are concerned. */
+  readyForPayment: boolean;
+  notReadyReason: PhysicalPosNotReadyReason | null;
+  /** `LIVE`, `DB_FALLBACK` (last recorded status) or `NONE`. */
+  source: 'LIVE' | 'DB_FALLBACK' | 'NONE' | (string & {});
+  wakePaths: string[];
+  /** A payment is running on the device; `null` when it could not be read. */
+  busy: boolean | null;
+}
+
+export interface PhysicalPosDeviceAssignment {
+  id: string;
+  deviceId: string;
+  store: PhysicalPosRef | null;
+  register: PhysicalPosRef | null;
+  validFrom: string;
+  validTo: string | null;
+  reasonCode: string;
+  createdByType: string;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface PhysicalPosOverview {
+  stores: { active: number; archived: number };
+  registers: { active: number; archived: number };
+  terminals: { environment: string; open: number; closed: number };
+  devices: {
+    environment: string;
+    total: number;
+    active: number;
+    pending: number;
+    suspended: number;
+    maintenance: number;
+    retired: number;
+    unverified: number;
+  } | null;
+  transactions: null;
+  generatedAt: string;
+}
+
+export interface PhysicalPosVendor {
+  code: string;
+  displayName: string;
+  status: string;
+  fallbackImage: PhysicalPosImage | null;
+}
+
+export interface PhysicalPosDeviceModel {
+  id: string;
+  vendorCode: string;
+  modelCode: string;
+  displayName: string;
+  deviceType: string;
+  formFactor: string;
+  fiscalCapable: boolean;
+  status: string;
+  image: PhysicalPosImage | null;
+  vendorFallbackImage: PhysicalPosImage | null;
+}
+
+export interface PhysicalPosCatalogAcquirer {
+  acquirerCode: string;
+  displayName: string;
+}
+
+/** A write that takes an `Idempotency-Key` (201 new / 200 replay on create routes). */
+export type PhysicalPosKeyedResult<T> = T & { statusCode: number; idempotencyKey: string };
+
+export interface PhysicalPosEntityListFilters extends PhysicalPosPageFilters {
+  /** Fills `totalCount` (filtered count; ask on the first page only). */
+  includeTotal?: boolean;
+}
+
+export interface PhysicalPosStatusChangeRequest {
+  rowVersion: number;
+  /** Closed set checked by the gateway. */
+  reasonCode: string;
+}
+
+export interface PhysicalPosCreateStoreRequest {
+  code: string;
+  name: string;
+  city?: string;
+  district?: string;
+  addressLine?: string;
+  timezone?: string;
+  externalRef?: string;
+}
+
+export interface PhysicalPosUpdateStoreRequest {
+  rowVersion: number;
+  name?: string;
+  city?: string | null;
+  district?: string | null;
+  addressLine?: string | null;
+  timezone?: string;
+  externalRef?: string | null;
+}
+
+export interface PhysicalPosCreateTerminalRequest {
+  code: string;
+  displayName: string;
+  vendorCode?: string;
+  virtualSerial?: string;
+  vendorTerminalRef?: string;
+}
+
+export interface PhysicalPosAddTerminalAcquirerRequest {
+  vendorAcquirerRef: string;
+  merchantNumber: string;
+  terminalNumber: string;
+  label?: string;
+  currencies: string[];
+}
+
+export interface PhysicalPosUpdateTerminalAcquirerRequest {
+  rowVersion: number;
+  label?: string | null;
+  currencies?: string[];
+  status?: string;
+}
+
+export interface PhysicalPosCreateDeviceRequest {
+  vendorCode: string;
+  deviceModelId: string;
+  serialNumber: string;
+  displayName?: string;
+  externalRef?: string;
+  storeId?: string;
+  registerId?: string;
+  integrationChannel: string;
+  channelVariant?: string;
+  appMode?: string;
+}
+
+export interface PhysicalPosUpdateDeviceRequest {
+  rowVersion: number;
+  displayName?: string | null;
+  externalRef?: string | null;
+  integrationChannel?: string;
+  channelVariant?: string | null;
+  appMode?: string | null;
+}
+
+export interface PhysicalPosDeviceFilters extends PhysicalPosEntityListFilters {
+  storeId?: string;
+  registerId?: string;
+  vendorCode?: string;
+  deviceModelId?: string;
+  deviceType?: string;
+  lifecycleStatus?: string;
+  ownershipStatus?: string;
+  integrationChannel?: string;
+  /** Prefix of serial number, display name or external reference. */
+  q?: string;
+}
+
+export class PhysicalPosManagementClient {
+  constructor(api: ApiClient);
+  getOverview(): Promise<PhysicalPosOverview>;
+  listVendors(): Promise<PhysicalPosVendor[]>;
+  listDeviceModels(filters?: { vendorCode?: string; deviceType?: string; status?: string }): Promise<PhysicalPosDeviceModel[]>;
+  listAcquirers(): Promise<PhysicalPosCatalogAcquirer[]>;
+
+  listStores(filters?: PhysicalPosEntityListFilters & { status?: string; q?: string }): Promise<PhysicalPosPage<PhysicalPosStoreListItem>>;
+  iterateStores(filters?: PhysicalPosEntityListFilters & { status?: string; q?: string }): AsyncGenerator<PhysicalPosStoreListItem, void, void>;
+  createStore(request: PhysicalPosCreateStoreRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ store: PhysicalPosStore; replayed: boolean }>>;
+  getStore(storeId: string): Promise<{ store: PhysicalPosStore; registerSummary: { activeCount: number; archivedCount: number }; assignedDeviceCount: number }>;
+  updateStore(storeId: string, request: PhysicalPosUpdateStoreRequest): Promise<PhysicalPosStore>;
+  archiveStore(storeId: string, request: PhysicalPosStatusChangeRequest): Promise<{ store: PhysicalPosStore; archivedRegisterCount: number }>;
+  restoreStore(storeId: string, request: PhysicalPosStatusChangeRequest): Promise<PhysicalPosStore>;
+  listStoreAudit(storeId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosAuditEvent>>;
+  iterateStoreAudit(storeId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosAuditEvent, void, void>;
+
+  listRegisters(storeId: string, filters?: PhysicalPosEntityListFilters & { status?: string }): Promise<PhysicalPosPage<PhysicalPosRegister>>;
+  iterateRegisters(storeId: string, filters?: PhysicalPosEntityListFilters & { status?: string }): AsyncGenerator<PhysicalPosRegister, void, void>;
+  createRegister(storeId: string, request: { code: string; name: string }, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ register: PhysicalPosRegister; replayed: boolean }>>;
+  updateRegister(registerId: string, request: { rowVersion: number; name?: string }): Promise<PhysicalPosRegister>;
+  archiveRegister(registerId: string, request: PhysicalPosStatusChangeRequest): Promise<PhysicalPosRegister>;
+  restoreRegister(registerId: string, request: PhysicalPosStatusChangeRequest): Promise<PhysicalPosRegister>;
+  listRegisterAudit(registerId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosAuditEvent>>;
+  iterateRegisterAudit(registerId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosAuditEvent, void, void>;
+
+  listTerminals(filters?: PhysicalPosEntityListFilters & { status?: string; q?: string }): Promise<PhysicalPosPage<PhysicalPosTerminal>>;
+  iterateTerminals(filters?: PhysicalPosEntityListFilters & { status?: string; q?: string }): AsyncGenerator<PhysicalPosTerminal, void, void>;
+  createTerminal(request: PhysicalPosCreateTerminalRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ terminal: PhysicalPosTerminal; replayed: boolean }>>;
+  getTerminal(terminalId: string): Promise<{ terminal: PhysicalPosTerminalDetail; acquirers: { items: PhysicalPosTerminalAcquirer[]; pageInfo: { hasMore: boolean; nextCursor: string | null; totalCount: number | null } } }>;
+  updateTerminal(terminalId: string, request: { rowVersion: number; displayName?: string; vendorCode?: string }): Promise<PhysicalPosTerminal>;
+  closeTerminal(terminalId: string, request: PhysicalPosStatusChangeRequest): Promise<PhysicalPosTerminal>;
+  listTerminalAcquirers(terminalId: string, filters?: PhysicalPosEntityListFilters): Promise<PhysicalPosPage<PhysicalPosTerminalAcquirer>>;
+  iterateTerminalAcquirers(terminalId: string, filters?: PhysicalPosEntityListFilters): AsyncGenerator<PhysicalPosTerminalAcquirer, void, void>;
+  addTerminalAcquirer(terminalId: string, request: PhysicalPosAddTerminalAcquirerRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ acquirer: PhysicalPosTerminalAcquirer; replayed: boolean }>>;
+  updateTerminalAcquirer(terminalAcquirerId: string, request: PhysicalPosUpdateTerminalAcquirerRequest): Promise<PhysicalPosTerminalAcquirer>;
+  changeTerminalDevice(terminalId: string, request: { rowVersion: number; deviceId: string; reasonCode: string }): Promise<{ terminal: PhysicalPosTerminal; link: PhysicalPosDeviceLink }>;
+  closeTerminalDeviceLink(terminalId: string, request: PhysicalPosStatusChangeRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ terminal: PhysicalPosTerminal; link: PhysicalPosDeviceLink | null; replayed: boolean }>>;
+  listTerminalLinks(terminalId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosDeviceLink>>;
+  iterateTerminalLinks(terminalId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosDeviceLink, void, void>;
+  listTerminalAudit(terminalId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosTerminalAuditEvent>>;
+  iterateTerminalAudit(terminalId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosTerminalAuditEvent, void, void>;
+
+  listDevices(filters?: PhysicalPosDeviceFilters): Promise<PhysicalPosPage<PhysicalPosDeviceSummary>>;
+  iterateDevices(filters?: PhysicalPosDeviceFilters): AsyncGenerator<PhysicalPosDeviceSummary, void, void>;
+  createDevice(request: PhysicalPosCreateDeviceRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ device: PhysicalPosDevice; replayed: boolean }>>;
+  getDevice(deviceId: string): Promise<PhysicalPosDevice>;
+  updateDevice(deviceId: string, request: PhysicalPosUpdateDeviceRequest): Promise<PhysicalPosDevice>;
+  assignDevice(deviceId: string, request: { rowVersion: number; storeId: string; registerId?: string | null; reasonCode: string }): Promise<{ device: PhysicalPosDevice; assignment: PhysicalPosDeviceAssignment; previousAssignmentId: string | null }>;
+  closeDeviceAssignment(deviceId: string, request: PhysicalPosStatusChangeRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ device: PhysicalPosDevice; closedAssignment: PhysicalPosDeviceAssignment | null; replayed: boolean }>>;
+  changeDeviceLifecycle(deviceId: string, request: { rowVersion: number; target: 'ACTIVE' | 'SUSPENDED' | 'MAINTENANCE'; reasonCode: string }): Promise<PhysicalPosDevice>;
+  retireDevice(deviceId: string, request: PhysicalPosStatusChangeRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ device: PhysicalPosDevice; replayed: boolean }>>;
+  listDeviceAssignments(deviceId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosDeviceAssignment>>;
+  iterateDeviceAssignments(deviceId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosDeviceAssignment, void, void>;
+  listDeviceAudit(deviceId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosAuditEvent>>;
+  iterateDeviceAudit(deviceId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosAuditEvent, void, void>;
+}
+/** Convert exact decimal text to canonical minor units using the currency exponent. */
+export function decimalToMinor(value: string, currency: string): string;

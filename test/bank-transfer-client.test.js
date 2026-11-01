@@ -78,7 +78,7 @@ function makeClient(responder) {
 
 const transferJson = (overrides = {}) => ({
   id: TRANSFER_ID, connectionId: CONNECTION_ID, accountId: ACCOUNT_ID, environment: 'test', status: 'SUBMITTED', rail: null,
-  amountMinor: 150075, currency: 'TRY', sourceIbanMasked: 'TR00 **** **** **** **** **00 00',
+  amountMinor: "150075", currency: 'TRY', sourceIbanMasked: 'TR00 **** **** **** **** **00 00',
   receiverIbanMasked: 'TR00 **** **** **** **** **01 46', receiverNameMasked: 'Ö**** T*******', receiverBankCode: '0062',
   paymentPurpose: null, description: 'Fatura 2026-0042', idempotencyKey: 'payout-2026-0042', failureCode: null,
   outcomeUnknown: false, initiatedVia: 'API', sanctionStatus: 'NOT_SCREENED', bankTransactionId: null, bankState: null,
@@ -88,7 +88,7 @@ const transferJson = (overrides = {}) => ({
 
 const transferRequest = (overrides = {}) => ({
   accountId: ACCOUNT_ID, receiverIban: 'TR050006200000000000000146', receiverName: 'Örnek Tedarik A.Ş.',
-  amountMinor: 150075, description: 'Fatura 2026-0042', ...overrides,
+  amountMinor: "150075", description: 'Fatura 2026-0042', ...overrides,
 });
 
 test('client.bankConnect carries the transfer and exchange sub-clients', () => {
@@ -109,7 +109,7 @@ test('every transfer and exchange call is signed, follows BANK_TRANSFER_ROUTES a
     'transfers.iterate': ['listTransfers', () => drain(transfers.iterate())],
     'transfers.get': ['getTransfer', () => transfers.get(TRANSFER_ID)],
     'fx.listRates': ['listFxRates', () => fx.listRates(CONNECTION_ID)],
-    'fx.createQuote': ['createFxQuote', () => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, targetAmountMinor: 100000 })],
+    'fx.createQuote': ['createFxQuote', () => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, targetAmountMinor: "100000" })],
     'fx.createOrder': ['createFxOrder', () => fx.createOrder({ quoteId: QUOTE_ID })],
     'fx.listOrders': ['listFxOrders', () => fx.listOrders()],
     'fx.iterateOrders': ['listFxOrders', () => drain(fx.iterateOrders())],
@@ -146,7 +146,7 @@ test('create() sends the whitelisted body, generates a UUID key and keeps a call
   const first = calls[0];
   assert.deepEqual(JSON.parse(first.body), {
     accountId: ACCOUNT_ID, receiverIban: 'TR050006200000000000000146', receiverName: 'Örnek Tedarik A.Ş.',
-    amountMinor: 150075, description: 'Fatura 2026-0042', currency: 'TRY',
+    amountMinor: "150075", description: 'Fatura 2026-0042', currency: 'TRY',
   });
   assert.match(first.headers['Idempotency-Key'], UUID_V4);
 
@@ -175,17 +175,17 @@ test('invalid requests fail before anything is sent', async () => {
   const cases = [
     [() => transfers.create(transferRequest({ environment: 'test' })), /does not accept environment/],
     [() => transfers.create(transferRequest({ receiverName: '' })), /requires receiverName/],
-    [() => transfers.create(transferRequest({ amountMinor: 1500.75 })), /positive integer/],
-    [() => transfers.create(transferRequest({ amountMinor: '150075' })), /positive integer/],
+    [() => transfers.create(transferRequest({ amountMinor: 1500.75 })), /minor units/],
+    [() => transfers.create(transferRequest({ amountMinor: 150075 })), /minor units/],
     [() => transfers.create(transferRequest({ receiverName: 'A' })), /2-140/],
     [() => transfers.create(transferRequest({ description: 'a'.repeat(141) })), /140/],
     [() => transfers.create(transferRequest({ paymentPurpose: 'kira ödemesi' })), /paymentPurpose/],
     [() => transfers.create(transferRequest({ currency: 'TL' })), /ISO 4217/],
     [() => transfers.create(transferRequest(), 'short'), /idempotencyKey/],
     [() => transfers.create(transferRequest(), 'payout 2026 0042'), /idempotencyKey/],
-    [() => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, sourceAmountMinor: 1, targetAmountMinor: 1 }), /exactly one/],
+    [() => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, sourceAmountMinor: "1", targetAmountMinor: "1" }), /exactly one/],
     [() => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID }), /exactly one/],
-    [() => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: ACCOUNT_ID, sourceAmountMinor: 1 }), /two different accounts/],
+    [() => fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: ACCOUNT_ID, sourceAmountMinor: "1" }), /two different accounts/],
     [() => fx.createOrder({}), /requires quoteId/],
     [() => fx.createOrder({ quoteId: QUOTE_ID, fxSessionId: QUOTE_ID }), /does not accept fxSessionId/],
     [() => transfers.list({ environment: 'test' }), /Unknown filter/],
@@ -218,13 +218,13 @@ test('list filters are sent the way the gateway parses them', async () => {
 test('quote and order answers are the gateway JSON as is; an IP refusal keeps its code', async () => {
   const quote = {
     id: QUOTE_ID, connectionId: CONNECTION_ID, sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, sourceCurrency: 'TRY',
-    targetCurrency: 'USD', sourceAmountMinor: 3412500, targetAmountMinor: 100000, requestedSide: 'TARGET', appliedRate: '34.1250',
+    targetCurrency: 'USD', sourceAmountMinor: "3412500", targetAmountMinor: "100000", requestedSide: 'TARGET', appliedRate: '34.1250',
     taxAmountMinor: null, expiresAt: '2026-01-01T07:01:20.000Z', validForSeconds: 80, insufficientBalance: false,
     belowMinimum: false, createdAt: '2026-01-01T07:00:00.000Z',
   };
   const answers = [jsonResponse(201, envelope(quote)), jsonResponse(403, { code: 'bank_connect.auth.ip_not_allowed', message: 'Request from this IP is not allowed for this API key.' })];
   const { fx, transfers } = makeClient(() => answers.shift());
-  assert.deepEqual(await fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, targetAmountMinor: 100000 }), quote);
+  assert.deepEqual(await fx.createQuote({ sourceAccountId: ACCOUNT_ID, targetAccountId: USD_ACCOUNT_ID, targetAmountMinor: "100000" }), quote);
   await assert.rejects(() => transfers.create(transferRequest()), (error) => error instanceof ApiError && error.statusCode === 403 && error.code === 'bank_connect.auth.ip_not_allowed');
 });
 

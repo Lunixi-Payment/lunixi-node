@@ -25,6 +25,10 @@ const { SanctionClient } = require('./sanction/sanction-client');
 const sanctionValues = require('./sanction/sanction-values');
 const { InsuranceClient } = require('./insurance/insurance-client');
 const insuranceValues = require('./insurance/insurance-values');
+const { PhysicalPosClient } = require('./physical-pos/physical-pos-client');
+const { PhysicalPosManagementClient } = require('./physical-pos/physical-pos-management-client');
+const { parsePhysicalPosWebhookEvent } = require('./physical-pos/physical-pos-webhook');
+const physicalPosValues = require('./physical-pos/physical-pos-values');
 const fraudTaxonomy = require('./fraud/taxonomy');
 const { FraudEvents, FRAUD_EVENT_TYPES, FraudDecisionValue, FRAUD_DECISION_VALUES } = require('./fraud/fraud-events');
 const { ALLOWED_FIELDS: FRAUD_EVALUATE_FIELDS } = require('./fraud/evaluate-request');
@@ -58,6 +62,8 @@ class LunixiClient {
     this.sanction = new SanctionClient(this.api);
     this.reference = new ReferenceClient(this.api);
     this.insurance = new InsuranceClient(this.api);
+    this.physicalPos = new PhysicalPosClient(this.api);
+    this.physicalPosManagement = new PhysicalPosManagementClient(this.api);
   }
 
   static generateKeyPair() {
@@ -89,6 +95,9 @@ module.exports = {
   SanctionClient,
   ReferenceClient,
   InsuranceClient,
+  PhysicalPosClient,
+  PhysicalPosManagementClient,
+  parsePhysicalPosWebhookEvent,
   FraudEvents,
   FRAUD_EVENT_TYPES,
   FraudDecisionValue,
@@ -210,5 +219,16 @@ module.exports = {
   INSURANCE_QUOTE_FIELDS: insuranceValues.INSURANCE_QUOTE_FIELDS,
   INSURANCE_LEAD_FIELDS: insuranceValues.INSURANCE_LEAD_FIELDS,
   INSURANCE_FILTERS: insuranceValues.INSURANCE_FILTERS,
+  PhysicalPosPaymentOperation: physicalPosValues.PhysicalPosPaymentOperation,
+  PhysicalPosPaymentStatus: physicalPosValues.PhysicalPosPaymentStatus,
+  PhysicalPosReversalStatus: physicalPosValues.PhysicalPosReversalStatus,
+  PhysicalPosEvents: physicalPosValues.PhysicalPosEvents,
+  PHYSICAL_POS_EVENT_PATTERN: physicalPosValues.PHYSICAL_POS_EVENT_PATTERN,
+  PHYSICAL_POS_EVENT_TYPES: physicalPosValues.PHYSICAL_POS_EVENT_TYPES,
+  PHYSICAL_POS_REQUEST_FIELDS: physicalPosValues.PHYSICAL_POS_REQUEST_FIELDS,
+  PHYSICAL_POS_FILTERS: physicalPosValues.PHYSICAL_POS_FILTERS,
+  PHYSICAL_POS_NOT_STARTED_CODES: physicalPosValues.PHYSICAL_POS_NOT_STARTED_CODES,
   ...errors,
 };
+
+module.exports.decimalToMinor = require('./money').decimalToMinor;

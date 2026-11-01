@@ -22,7 +22,7 @@ function dueDate(monthsAhead) {
 
 (async () => {
   const client = sampleClient();
-  const amount = 300000;
+  const amount = "300000";
 
   const methods = (await client.payments.listPaymentMethods()).data.methods;
   const method = methods.find((entry) => entry.paymentMethod === PaymentMethod.PROMISSORY_NOTE);
@@ -49,8 +49,8 @@ function dueDate(monthsAhead) {
   const request = new DirectMethodPaymentRequest(amount, 'TRY', orderId)
     .withMethodFields(PaymentMethod.PROMISSORY_NOTE, method.providerSelection === 'REQUIRED' ? provider.providerCode : null, fields)
     .withPromissoryNoteSchedule([
-      { amount: 100000, dueDate: dueDate(1) },
-      { amount: 200000, dueDate: dueDate(2) },
+      { amount: "100000", dueDate: dueDate(1) },
+      { amount: "200000", dueDate: dueDate(2) },
     ])
     .withBuyer(sampleBuyer());
 

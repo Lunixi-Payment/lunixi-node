@@ -25,7 +25,7 @@ const {
 } = require('../src');
 
 const AMOUNT_BUILDERS = ['CreateIntentRequest', 'DirectMethodPaymentRequest'];
-const INVALID_AMOUNTS = [0, -1, 100.5, '10050', null, undefined, Number.NaN, Number.MAX_SAFE_INTEGER + 1];
+const INVALID_AMOUNTS = [0, -1, 100.5, 10050, null, undefined, Number.NaN, Number.MAX_SAFE_INTEGER + 1];
 
 function makeClient() {
   const keys = LunixiClient.generateKeyPair();
@@ -62,7 +62,7 @@ function basket(amount) {
 }
 
 /** A card charge through direct/payment (the only server-side card charge). */
-function cardRequest(amount = 10050) {
+function cardRequest(amount = "10050") {
   return new DirectMethodPaymentRequest(amount, 'TRY', 'ORD-AMT-1')
     .withCard(card())
     .withBuyer(new Buyer({ name: 'Ada', surname: 'Yilmaz' }))
@@ -74,19 +74,19 @@ function cardRequest(amount = 10050) {
 
 test('every builder sends amount and never price / paidPrice', () => {
   const bodies = {
-    intent: new CreateIntentRequest(10050, 'TRY', 'ORD-AMT-1').withBasketItems(basket(10050)).toJSON(),
+    intent: new CreateIntentRequest('10050', 'TRY', 'ORD-AMT-1').withBasketItems(basket('10050')).toJSON(),
     methodCard: cardRequest().toJSON(),
-    methodMobileBilling: new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-AMT-1')
+    methodMobileBilling: new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-AMT-1')
       .withMethodFields(PaymentMethod.MOBILE_BILLING, null, { gsmNumber: '+905321234567' })
       .toJSON(),
   };
 
   for (const [name, body] of Object.entries(bodies)) {
-    assert.equal(body.amount, 10050, `${name}: amount`);
+    assert.equal(body.amount, '10050', `${name}: amount`);
     for (const field of REMOVED_AMOUNT_FIELDS) assert.equal(Object.prototype.hasOwnProperty.call(body, field), false, `${name}: ${field}`);
   }
-  assert.equal(bodies.intent.basketItems[0].price, 10050, 'a basket item keeps its own price');
-  assert.equal(bodies.methodCard.basketItems[0].price, 10050, 'a basket item keeps its own price');
+  assert.equal(bodies.intent.basketItems[0].price, '10050', 'a basket item keeps its own price');
+  assert.equal(bodies.methodCard.basketItems[0].price, '10050', 'a basket item keeps its own price');
 });
 
 test('the removed amount setters are gone', () => {
@@ -105,13 +105,13 @@ test('amount is a positive integer in minor units on every builder', () => {
     assert.throws(() => new CreateIntentRequest(amount, 'TRY', 'O'), ConfigurationError, `intent ${label}`);
     assert.throws(() => new DirectMethodPaymentRequest(amount, 'TRY', 'O'), ConfigurationError, `direct/payment ${label}`);
   }
-  assert.equal(new CreateIntentRequest(1, 'TRY', 'O').toJSON().amount, 1, 'one minor unit is the smallest amount');
+  assert.equal(new CreateIntentRequest('1', 'TRY', 'O').toJSON().amount, '1', 'one minor unit is the smallest amount');
 });
 
 test('a card direct/payment carries installment and the installment quote token', () => {
-  const body = cardRequest(15000).withInstallment(3, 'iq_1').toJSON();
+  const body = cardRequest('15000').withInstallment(3, 'iq_1').toJSON();
 
-  assert.equal(body.amount, 15000, 'amount stays the basket total; the system adds the installment fee');
+  assert.equal(body.amount, '15000', 'amount stays the basket total; the system adds the installment fee');
   assert.equal(body.installment, 3);
   assert.equal(body.installmentQuoteToken, 'iq_1');
 
@@ -138,10 +138,10 @@ test('the direct/payment field list carries amount and none of the removed field
 
 test('a raw body with price or paidPrice is refused before anything is sent', async () => {
   const { client, calls } = makeClient();
-  const intent = new CreateIntentRequest(10050, 'TRY', 'ORD-AMT-1').toJSON();
+  const intent = new CreateIntentRequest('10050', 'TRY', 'ORD-AMT-1').toJSON();
   const marketplace = { ...intent, sellers: [{ subDealerId: 'd_1', amountMinor: '10050' }], multiSellerPolicy: 'ALL_OR_NOTHING' };
   const methodCard = cardRequest().toJSON();
-  const method = new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-AMT-1')
+  const method = new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-AMT-1')
     .withMethodFields(PaymentMethod.MOBILE_BILLING, null, { gsmNumber: '+905321234567' })
     .toJSON();
 
@@ -154,7 +154,7 @@ test('a raw body with price or paidPrice is refused before anything is sent', as
   const bases = { createIntent: intent, createMarketplaceIntent: marketplace, directMethodPaymentCard: methodCard, directMethodPayment: method };
 
   for (const [operation, send] of Object.entries(sends)) {
-    for (const extra of [{ price: 10050 }, { paidPrice: 10050 }, { price: 10050, paidPrice: 10050 }, { paidPrice: null }, { price: '10050' }]) {
+    for (const extra of [{ price: "10050" }, { paidPrice: "10050" }, { price: "10050", paidPrice: "10050" }, { paidPrice: null }, { price: '10050' }]) {
       await assert.rejects(
         () => send({ ...bases[operation], ...extra }),
         (error) => error instanceof ConfigurationError && /removed/.test(error.message) && /'amount'/.test(error.message),
@@ -174,7 +174,7 @@ test('a raw body with price or paidPrice is refused before anything is sent', as
   ]);
   for (const call of calls) {
     const body = JSON.parse(call.body);
-    assert.equal(body.amount, 10050);
+    assert.equal(body.amount, '10050');
     for (const field of REMOVED_AMOUNT_FIELDS) assert.equal(Object.prototype.hasOwnProperty.call(body, field), false);
   }
 });
@@ -183,7 +183,7 @@ test('a raw direct card body without amount is refused before sending', async ()
   const { client, calls } = makeClient();
   const { amount, ...withoutAmount } = cardRequest().toJSON();
 
-  assert.equal(amount, 10050);
+  assert.equal(amount, '10050');
   await assert.rejects(() => client.payments.directMethodPayment(withoutAmount, 'k-card'), /require 'amount'/);
   assert.equal(calls.length, 0);
 });
@@ -201,7 +201,7 @@ test('index.d.ts declares exactly the setters the amount builders have', () => {
     const actual = new Set(Object.getOwnPropertyNames(runtime[name].prototype).filter((key) => key !== 'constructor'));
     assert.deepEqual([...actual].filter((key) => !declared.has(key)).sort(), [], `${name}: runtime methods missing from index.d.ts`);
     assert.deepEqual([...declared].filter((key) => !actual.has(key)).sort(), [], `${name}: declared methods missing at runtime`);
-    assert.match(block[1], /constructor\(\s*amount: number/, `${name}: the first constructor argument is amount`);
+    assert.match(block[1], /constructor\(\s*amount: string/, `${name}: the first constructor argument is amount`);
     assert.doesNotMatch(block[1], /paidPrice|withPrice/, `${name}: no removed amount field in the typings`);
   }
   assert.match(typings, /export class DirectMethodPaymentRequest \{[\s\S]*?withInstallment\(value: number, quoteToken\?: string \| null\): this;/);

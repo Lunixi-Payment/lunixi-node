@@ -1,6 +1,6 @@
 {
   "name": "@lunixi/node-sdk",
-  "version": "0.20.1",
+  "version": "1.0.0",
   "description": "Lunixi server-side Node.js integration SDK",
   "homepage": "https://github.com/Lunixi-Payment/lunixi-node#readme",
   "repository": {
@@ -28,6 +28,7 @@
     "src",
     "README.md",
     "CHANGELOG.md",
+    "MIGRATION-1.0.md",
     "LICENSE"
   ],
   "engines": {

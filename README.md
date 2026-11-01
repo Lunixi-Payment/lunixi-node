@@ -9,21 +9,23 @@
 
 # Lunixi Node.js SDK
 
+**Version 1.0.0 uses canonical minor-unit strings for money.** This is a breaking change from 0.x; update request and response handling together. See [migration](MIGRATION-1.0.md).
+
 [![CI](https://github.com/Lunixi-Payment/lunixi-node/actions/workflows/ci.yml/badge.svg)](https://github.com/Lunixi-Payment/lunixi-node/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![Downloads](https://img.shields.io/npm/dm/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![Node.js](https://img.shields.io/node/v/@lunixi/node-sdk)](https://nodejs.org) [![Types](https://img.shields.io/npm/types/@lunixi/node-sdk)](https://www.npmjs.com/package/@lunixi/node-sdk) [![License](https://img.shields.io/npm/l/@lunixi/node-sdk)](LICENSE) [![Docs](https://img.shields.io/badge/docs-docs.lunixi.com-FF6B35)](https://docs.lunixi.com/sdks/node)
 
 **[Documentation](https://docs.lunixi.com/sdks/node) · [Changelog](https://github.com/Lunixi-Payment/lunixi-node/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-node/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-node/blob/main/SECURITY.md)**
 
 Server-side Node.js SDK for Lunixi payment integrations. The SDK is framework-agnostic and works with Express, Fastify, NestJS, Hapi, serverless functions, and plain Node.js.
 
-Requires Node.js 18+. Checkout improvements below are published in [npm 0.20.1](https://www.npmjs.com/package/@lunixi/node-sdk/v/0.20.1). All 38 downloaded package files match the reviewed release; registry integrity is verified. Express and NestJS use this same package.
+Requires Node.js 18+. Express and NestJS use this same package.
 
 ## Install
 
 ```bash
-npm install @lunixi/node-sdk
+npm install @lunixi/node-sdk@1.0.0
 ```
 
-The SDK has no runtime dependencies. TypeScript type definitions are included.
+Use this command after 1.0.0 is available on npm. The SDK has no runtime dependencies. TypeScript type definitions are included.
 
 ## Development
 
@@ -94,8 +96,8 @@ merchantApp.use('/billing', createCheckoutApp({ lunixi, nativeCheckout }));
 (`CreateIntentRequest`, also for `createMarketplaceIntent`) and `direct/payment`
 (`DirectMethodPaymentRequest`, card included) both take it as their first argument.
 
-- It is the basket total in minor units: an integer, at least 1
-  (`10050` = 100.50 TRY). Anything else throws `ConfigurationError`.
+- It is the basket total as a positive canonical minor-unit string
+  (`"10050"` = 100.50 TRY). Anything else throws `ConfigurationError`.
 - With basket items, the items' `price` values must add up to `amount`.
 - `amount` does not include an installment fee. For an installment charge send
   the installment count and the quote token from `payments.installmentOptions()`
@@ -119,7 +121,7 @@ const { BasketItem, InsuranceItemCategory } = require('@lunixi/node-sdk');
 
 new BasketItem({
   id: 'item-1',
-  price: 100000,
+  price: "100000",
   name: 'Izmir-Ankara train ticket',
   category1: 'ticket',
   itemType: BasketItem.TYPE_VIRTUAL,
@@ -151,7 +153,7 @@ new BasketItem({
 
 ```js
 new BasketItem({
-  id: 'item-1', price: 100000, name: 'Izmir-Ankara train ticket', category1: 'ticket',
+  id: 'item-1', price: "100000", name: 'Izmir-Ankara train ticket', category1: 'ticket',
   itemType: BasketItem.TYPE_VIRTUAL, insuranceCategory: InsuranceItemCategory.TICKET,
   insuranceData: {
     insured: [{ identityType: 'PASSPORT', identityNumber: '…', birthDate: '…' }],
@@ -197,7 +199,7 @@ const { CreatePaymentLinkRequest, PaymentLinkUsage } = require('@lunixi/node-sdk
 
 // Build the body from your own record, not from the current time: a retry with
 // the same Idempotency-Key must send the same body (a different body is 409).
-const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, 150000, 'TRY', 'Consulting fee')
+const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, '150000', 'TRY', 'Consulting fee')
   .withExpiresAt(invoice.dueAt) // a Date or an ISO-8601 string in the future
   .withReference(invoice.number)
   .withRecipient({ email: invoice.customerEmail });
@@ -213,7 +215,7 @@ for await (const row of lunixi.paymentLinks.iterate({ state: ['ACTIVE', 'PAUSED'
 }
 ```
 
-Amounts are integers in minor units (`150000` = 1,500.00 TRY). Fulfil orders
+Amounts are canonical minor-unit strings (`"150000"` = 1,500.00 TRY). Fulfil orders
 from the `payment.captured` webhook, whose payload carries `paymentLinkId` and
 `paymentLinkCode`.
 
@@ -298,8 +300,8 @@ const done = await wallet.transfers.completeW2W(started.operationId, {
 }, `w2w-complete-${transferId}`);
 ```
 
-- Amounts are minor-unit digit strings (`"12550"`). A safe integer number is
-  sent as its digit string; a float is refused before the request leaves.
+- Amounts are canonical minor-unit strings (`"12550"`). Numeric inputs are
+  refused before the request leaves, including safe integers.
 - Bodies are checked against `WALLET_ROUTES` before sending: an unknown field, a
   missing required field or a missing `Idempotency-Key` is a
   `ConfigurationError`, not a 400 from the gateway.
@@ -347,7 +349,7 @@ try {
 ```
 
 - Lists return `{ items, hasMore, nextCursor }`; `iterate…()` follows the cursor.
-- A field without a value is left out of the response. Amounts are integers in
+- A field without a value is left out of the response. Amounts are canonical strings in
   minor units; IBANs and counterparty names are masked.
 - Filters are checked before sending: an unknown filter, a value outside its
   set or a window over 92 days is a `ConfigurationError`.
@@ -371,7 +373,7 @@ const { transfer, replayed } = await client.bankConnect.transfers.create({
   accountId,
   receiverIban: 'TR050006200000000000000146',
   receiverName: 'Örnek Tedarik A.Ş.',
-  amountMinor: 150075, // 1,500.75 TRY
+  amountMinor: "150075", // 1,500.75 TRY
   description: 'Invoice 2026-0042',
 }, `payout-${payoutId}`);
 
@@ -380,7 +382,7 @@ if (latest.status === BankTransferStatus.FAILED) console.log(latest.failureCode)
 
 // Exchange: quote, then order before quote.expiresAt.
 const quote = await client.bankConnect.fx.createQuote({
-  sourceAccountId: tryAccountId, targetAccountId: usdAccountId, targetAmountMinor: 100000, // buy 1,000.00 USD
+  sourceAccountId: tryAccountId, targetAccountId: usdAccountId, targetAmountMinor: "100000", // buy 1,000.00 USD
 });
 const { order } = await client.bankConnect.fx.createOrder({ quoteId: quote.id });
 ```
@@ -392,7 +394,7 @@ const { order } = await client.bankConnect.fx.createOrder({ quoteId: quote.id })
 
 `client.insurance` sells and services insurance for your basket items
 (`/api/v1/insurance`, product INSURANCE_SERVICE). Every call is signed; the key
-decides the environment. Amounts are integers in minor units.
+decides the environment. Amounts are canonical minor-unit strings.
 
 Collecting the premium in your own Lunixi payment:
 
@@ -400,7 +402,7 @@ Collecting the premium in your own Lunixi payment:
 const { BasketItem, CreateIntentRequest, InsuranceClient, InsuranceItemCategory } = require('@lunixi/node-sdk');
 
 const ticket = new BasketItem({
-  id: 'ticket-1', price: 100000, name: 'Izmir-Ankara train ticket', category1: 'ticket',
+  id: 'ticket-1', price: "100000", name: 'Izmir-Ankara train ticket', category1: 'ticket',
   itemType: BasketItem.TYPE_VIRTUAL, insuranceCategory: InsuranceItemCategory.TICKET,
   insuranceTypes: ['TICKET_CANCELLATION'],
 });
@@ -424,7 +426,7 @@ const order = await client.insurance.createOrder({
 // 4. Pay the insured items plus the premium item; amount is the sum.
 const premium = InsuranceClient.premiumBasketItem(order, { name: 'Ticket cancellation insurance', category1: 'insurance' });
 const created = await client.payments.createIntent(
-  new CreateIntentRequest(100000 + order.premiumAmount, 'TRY', 'ORD-1042').withBasketItems([ticket, premium]) /* buyer, addresses … */,
+  new CreateIntentRequest((100000n + BigInt(order.premiumAmount)).toString(), 'TRY', 'ORD-1042').withBasketItems([ticket, premium]) /* buyer, addresses … */,
   'checkout:ORD-1042',
 );
 
@@ -579,10 +581,10 @@ payment becomes `AUTHORIZED`; take it with `payments.capture()` or release it wi
 it, or with `withPreauth(false)`, the amount is captured immediately.
 
 ```js
-const request = new CreateIntentRequest(10050, 'TRY', 'ORD-1042').withPreauth(true);
+const request = new CreateIntentRequest('10050', 'TRY', 'ORD-1042').withPreauth(true);
 const intent = await lunixi.payments.createIntent(request, 'checkout:ORD-1042');
 // later, once the payment is AUTHORIZED:
-await lunixi.payments.capture(paymentId, null, 'capture:ORD-1042');
+await lunixi.payments.capture(paymentId, undefined, 'capture:ORD-1042');
 ```
 
 ## Direct card payments
@@ -603,7 +605,7 @@ most merchants should use the hosted checkout (`createIntent()`).
 - Send `buyer`, `billingAddress` and `basketItems` with the card.
 
 ```js
-const request = new DirectMethodPaymentRequest(15000, 'TRY', 'ORD-1042')
+const request = new DirectMethodPaymentRequest('15000', 'TRY', 'ORD-1042')
   .withCard(card)
   .withForce3D(true)
   // installment count and the quote from payments.installmentOptions(); the system adds the fee
@@ -660,7 +662,7 @@ const { DirectMethodPaymentRequest, PaymentMethod, PaymentActionType } = require
 const [method] = (await lunixi.payments.listPaymentMethods({ paymentMethod: PaymentMethod.MOBILE_BILLING })).data.methods;
 const provider = method.providers[0]; // the provider your buyer picked
 
-const request = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-1042')
+const request = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-1042')
   .withMethodFields(PaymentMethod.MOBILE_BILLING, provider.providerCode, { gsmNumber: '+905321234567' })
   .withCallbackUrl('https://merchant.example/payment/callback');
 
@@ -708,7 +710,7 @@ if (method.providers.length > 1) {
 }
 // PLATFORM without a pick: providerCode stays null; the platform picks the provider.
 
-const request = new DirectMethodPaymentRequest(5000, 'TRY', 'ORD-1043')
+const request = new DirectMethodPaymentRequest('5000', 'TRY', 'ORD-1043')
   .withMethodFields(method.paymentMethod, providerCode, fields);
 ```
 
@@ -751,14 +753,14 @@ const { SplitPaymentRequest, InstallmentOptionsRequest } = require('@lunixi/node
 
 // Card B in 3 installments: quote with the leg's amount and the stored card's BIN.
 const quote = await lunixi.payments.installmentOptions(
-  new InstallmentOptionsRequest(40000, 'TRY').withBinOrPan(cardBBin).withInstallment(3),
+  new InstallmentOptionsRequest('40000', 'TRY').withBinOrPan(cardBBin).withInstallment(3),
 );
 
-const request = new SplitPaymentRequest(100000, 'TRY', cardUserKey)
+const request = new SplitPaymentRequest('100000', 'TRY', cardUserKey)
   .withOrderId('ORD-1050')
   .withCallbackUrl('https://merchant.example/payment/callback')
-  .addCardLeg(cardAToken, 60000, { force3D: true })
-  .addCardLeg(cardBToken, 40000, { installment: 3, installmentQuoteToken: quote.data.quoteToken });
+  .addCardLeg(cardAToken, '60000', { force3D: true })
+  .addCardLeg(cardBToken, '40000', { installment: 3, installmentQuoteToken: quote.data.quoteToken });
 
 const key = 'split:ORD-1050'; // the identity of this split payment; reuse it on every call
 const split = (await lunixi.payments.createSplitPayment(request, key)).data;
@@ -789,13 +791,13 @@ const wallet = splitProvider(PaymentMethod.WALLET);
 const mobileBilling = splitProvider(PaymentMethod.MOBILE_BILLING);
 
 // 2 cards + wallet + Faturana Yansıt = 100000
-const request = new SplitPaymentRequest(100000, 'TRY', cardUserKey)
+const request = new SplitPaymentRequest('100000', 'TRY', cardUserKey)
   .withOrderId('ORD-1051')
   .withCallbackUrl('https://merchant.example/payment/callback')
-  .addCardLeg(cardAToken, 30000, { force3D: true })
-  .addCardLeg(cardBToken, 25000, { installment: 3, installmentQuoteToken: cardBQuoteToken })
-  .addMethodLeg(PaymentMethod.WALLET, wallet.providerCode, 20000, { gsmNumber: buyerGsm })
-  .addMethodLeg(PaymentMethod.MOBILE_BILLING, mobileBilling.providerCode, 25000, { gsmNumber: buyerGsm });
+  .addCardLeg(cardAToken, '30000', { force3D: true })
+  .addCardLeg(cardBToken, '25000', { installment: 3, installmentQuoteToken: cardBQuoteToken })
+  .addMethodLeg(PaymentMethod.WALLET, wallet.providerCode, '20000', { gsmNumber: buyerGsm })
+  .addMethodLeg(PaymentMethod.MOBILE_BILLING, mobileBilling.providerCode, '25000', { gsmNumber: buyerGsm });
 
 const key = 'split:ORD-1051';
 const split = (await lunixi.payments.createSplitPayment(request, key)).data;
@@ -951,15 +953,15 @@ your own account.
 ```js
 const { DirectMethodPaymentRequest, PaymentMethod } = require('@lunixi/node-sdk');
 
-const request = new DirectMethodPaymentRequest(300000, 'TRY', 'ORD-2001')
+const request = new DirectMethodPaymentRequest('300000', 'TRY', 'ORD-2001')
   .withMethodFields(PaymentMethod.PROMISSORY_NOTE, null, {
     debtorType: 'INDIVIDUAL',
     birthDate: '1990-01-01',
     address: { provinceCode: '06', districtCode: '1001', neighborhoodCode: '2001', line: 'Example Street 1' },
   })
   .withPromissoryNoteSchedule([
-    { amount: 100000, dueDate: '2030-01-15' },
-    { amount: 200000, dueDate: '2030-02-15' },
+    { amount: "100000", dueDate: '2030-01-15' },
+    { amount: "200000", dueDate: '2030-02-15' },
   ])
   .withBuyer(buyer);
 
@@ -1032,3 +1034,5 @@ Sample groups:
 - `10-insurance`: ticket cancellation insurance sold with your payment (eligibility, quote, order, premium item, bind), insurance data on the checkout item (prefill, quote on the payment), premium collected outside Lunixi with policy request, cancel and refund, policy PDF, orders, reconciliation summary and CSV, reference codes, webhook endpoint
 - `express`: minimal Express integration server
 - `nestjs`: provider/module/service/controller sample for NestJS applications
+
+Before upgrading from 0.x, follow [the money-string migration](MIGRATION-1.0.md).

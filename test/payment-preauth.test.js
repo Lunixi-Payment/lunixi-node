@@ -41,7 +41,7 @@ function gatewayCalls(calls) {
 }
 
 test('intent: withPreauth(true) writes the typed field and nothing into metadata', () => {
-  const body = new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-1')
+  const body = new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-1')
     .withMetadata({ order: 'ORD-PRE-1' })
     .withPreauth(true)
     .toJSON();
@@ -51,21 +51,21 @@ test('intent: withPreauth(true) writes the typed field and nothing into metadata
 });
 
 test('intent: withPreauth(false) is kept on the wire as an explicit false', () => {
-  const body = new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-2').withPreauth(false).toJSON();
+  const body = new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-2').withPreauth(false).toJSON();
 
   assert.equal(body.preauth, false);
   assert.equal(body.metadata, undefined);
 });
 
 test('intent without withPreauth sends no preauth field', () => {
-  const body = new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-3').toJSON();
+  const body = new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-3').toJSON();
 
   assert.equal(Object.prototype.hasOwnProperty.call(body, 'preauth'), false);
 });
 
 test('withPreauth refuses anything but a boolean', () => {
   for (const value of ['false', 'true', 0, 1, null, undefined, {}]) {
-    assert.throws(() => new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-4').withPreauth(value), ConfigurationError);
+    assert.throws(() => new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-4').withPreauth(value), ConfigurationError);
     assert.throws(() => cardRequest().withPreauth(value), ConfigurationError);
   }
 });
@@ -74,7 +74,7 @@ test('createIntent sends preauth: true to POST /payments/intents', async () => {
   const { client, calls } = makeClient();
 
   await client.payments.createIntent(
-    new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-5').withPreauth(true),
+    new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-5').withPreauth(true),
     'idem-intent-pre',
   );
 
@@ -89,7 +89,7 @@ test('createMarketplaceIntent carries the same typed preauth field', async () =>
   const { client, calls } = makeClient();
 
   await client.payments.createMarketplaceIntent(
-    new CreateIntentRequest(10050, 'TRY', 'ORD-PRE-6').withPreauth(true),
+    new CreateIntentRequest('10050', 'TRY', 'ORD-PRE-6').withPreauth(true),
     'idem-mp-pre',
   );
 
@@ -136,7 +136,7 @@ test('raw card directMethodPayment passes a boolean preauth through unchanged', 
 });
 
 function cardRequest() {
-  return new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-CARD-PRE-1')
+  return new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-CARD-PRE-1')
     .withCard(new CardDetails({
       cardHolderName: 'Ada Yilmaz',
       cardNumber: '5400000000000004',
@@ -165,7 +165,7 @@ function cardRequest() {
     .withBasketItems([
       new BasketItem({
         id: 'SKU-001',
-        price: 10050,
+        price: "10050",
         name: 'Demo Product',
         category1: 'Demo',
         itemType: BasketItem.TYPE_PHYSICAL,

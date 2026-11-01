@@ -90,7 +90,7 @@ function queryOf(call) {
 
 const bankRef = () => ({ bankId: BANK_ID, eftCode: '0000', name: 'ÖRNEK BANKA' });
 const transactionJson = (overrides = {}) => ({
-  transactionId: TRANSACTION_ID, accountId: ACCOUNT_ID, direction: 'CREDIT', amountMinor: 150000, currency: 'TRY',
+  transactionId: TRANSACTION_ID, accountId: ACCOUNT_ID, direction: 'CREDIT', amountMinor: "150000", currency: 'TRY',
   bookedAt: '2026-01-01T07:00:00.000Z', canonicalType: 'TRANSFER_IN', description: 'LNX-ORNEK-0001',
   counterpartyNameMasked: 'Ö**** A****', counterpartyIbanMasked: 'TR00 **** **** **** **** **00 00',
   receivedAt: '2026-01-01T07:05:00.000Z', ...overrides,
@@ -156,8 +156,8 @@ test('transaction filters are sent the way the gateway parses them', async () =>
     bookedFrom: new Date('2025-12-31T21:00:00.000Z'),
     bookedTo: '2026-04-02T21:00:00Z',
     direction: BankTransactionDirection.CREDIT,
-    minAmountMinor: 100,
-    maxAmountMinor: 200,
+    minAmountMinor: "100",
+    maxAmountMinor: "200",
     canonicalType: [BankTransactionType.TRANSFER_IN, BankTransactionType.FEE],
     limit: 50,
     cursor: 'opaque-cursor',
@@ -217,9 +217,9 @@ test('invalid filters fail before anything is sent', async () => {
     ['listTransactions', { direction: 'IN' }, /'direction'/],
     ['listTransactions', { canonicalType: ['TRANSFER_IN', 'NOT_A_TYPE'] }, /'canonicalType'/],
     ['listBalances', { currency: 'TL' }, /'currency'/],
-    ['listTransactions', { minAmountMinor: -1 }, /'minAmountMinor'/],
-    ['listTransactions', { maxAmountMinor: 12.5 }, /'maxAmountMinor'/],
-    ['listTransactions', { minAmountMinor: 500, maxAmountMinor: 100 }, /must not be greater/],
+    ['listTransactions', { minAmountMinor: "-1" }, /minAmountMinor/],
+    ['listTransactions', { maxAmountMinor: 12.5 }, /maxAmountMinor/],
+    ['listTransactions', { minAmountMinor: "500", maxAmountMinor: "100" }, /must not be greater/],
     ['listTransactions', { bookedTo: '2026-04-03T00:00:00Z' }, /'bookedTo' needs 'bookedFrom'/],
     ['listTransactions', { bookedFrom: '2026-04-03T00:00:00Z', bookedTo: '2026-04-01T00:00:00Z' }, /must not be after/],
     ['listTransactions', { bookedFrom: '2026-01-01T00:00:00Z', bookedTo: '2026-04-03T00:00:00.001Z' }, /at most 92 days/],
@@ -293,12 +293,12 @@ test('a page without a cursor is the last one; rows are the gateway JSON as is',
   assert.deepEqual(Object.keys(result), ['items', 'hasMore', 'nextCursor']);
 });
 
-test('detail reads unwrap data; amounts stay integers', async () => {
-  const detail = { ...transactionJson(), balanceAfterMinor: 1250050, documentNo: 'D-0001', bank: bankRef() };
+test('detail reads unwrap data; amounts stay canonical strings', async () => {
+  const detail = { ...transactionJson(), balanceAfterMinor: "1250050", documentNo: 'D-0001', bank: bankRef() };
   const { bank } = makeClient(() => jsonResponse(200, envelope(detail)));
   const transaction = await bank.getTransaction(TRANSACTION_ID);
   assert.deepEqual(transaction, detail);
-  assert.ok(Number.isInteger(transaction.amountMinor));
+  assert.equal(typeof transaction.amountMinor, 'string');
 });
 
 test('requestSync answers 202 with the sync request', async () => {
@@ -332,7 +332,7 @@ test('bank_account.transaction.received verifies with WebhookVerifier', () => {
   const timestamp = new Date().toISOString();
   const data = {
     transactionId: TRANSACTION_ID, accountId: ACCOUNT_ID, connectionId: CONNECTION_ID, bankEftCode: '0000', bankName: 'ÖRNEK BANKA',
-    direction: 'DEBIT', amountMinor: 2500, currency: 'TRY', bookedAt: '2026-01-01T07:00:00.000Z', valueAt: null,
+    direction: 'DEBIT', amountMinor: "2500", currency: 'TRY', bookedAt: '2026-01-01T07:00:00.000Z', valueAt: null,
     receivedAt: '2026-01-01T07:05:00.000Z', canonicalType: 'FEE', description: null, counterpartyNameMasked: null,
     counterpartyIbanMasked: null, receiptNo: null,
   };

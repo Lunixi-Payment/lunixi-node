@@ -1,6 +1,90 @@
 # Changelog
 
+## 1.0.0 — 2026-11-01
+
+- Physical POS payment/item/filter/report money uses canonical signed64 strings; raw numeric/null amounts are rejected before HTTP, malformed monetary 2xx payment replies retain UNKNOWN semantics, and signed webhooks are checked after signature verification.
+
+- Reject explicit null capture/refund amounts; full remaining operations use omission or the dedicated API described in MIGRATION-1.0.md.
+
+- Breaking: public money request/response fields require canonical minor-unit strings; JSON numbers are rejected.
+- Exact signed 64-bit fiat arithmetic and currency-aware decimal text conversion preserve values above JavaScript’s safe-integer limit.
+- See [MIGRATION-1.0.md](MIGRATION-1.0.md) before upgrading.
+
+
 All notable changes to `@lunixi/node-sdk`.
+
+### Physical POS additions
+
+Physical POS (card terminals) is included in the 1.0 string-money cut. Counts and rates remain numeric.
+
+### Added
+
+- `client.physicalPos` (`PhysicalPosClient`, `/api/v1/physical-pos`):
+  `createPayment()` (SALE, PREAUTH_OPEN, REFUND_UNMATCHED on a device chosen by
+  `deviceId`, `vendorCode` + `serialNumber` or `externalRef`; sale items with
+  `taxGroupCode`), `createReversal()` (VOID, REFUND by amount or by item,
+  PREAUTH_CLOSE, PREAUTH_CANCEL), `cancelPayment()`, `getPayment()`,
+  `listPayments()` / `iteratePayments()`, `listTransactions()` /
+  `iterateTransactions()`, `getTransaction()`, `listAmbiguousPayments()` /
+  `iterateAmbiguousPayments()`, `getSalesSummary()`, `getTaxSummary()`,
+  `listSettlements()` / `iterateSettlements()`.
+- Payment writes return `{ payment, replayed, statusCode, idempotencyKey }`:
+  202 for a new payment, 200 for a replay of the same key and body, and only
+  when the answer carries a payment. `createPayment()` and `createReversal()`
+  require the `Idempotency-Key` (`PhysicalPosClient.newIdempotencyKey()`;
+  store it with your order first and call again with the same key after an
+  unknown outcome); `cancelPayment()` creates one when omitted. A key is sent
+  exactly as given (never trimmed). Payment writes run their own attempts with
+  the same key and body; the core `ApiClient.request()` gains `retry: false`
+  (default unchanged).
+- `client.physicalPosManagement` (`PhysicalPosManagementClient`): overview,
+  catalog (vendors, device models, acquirers), stores and registers (create,
+  update, archive, restore, audit), logical terminals (create, update, close,
+  bank rows, device link change / close, link history, audit) and devices
+  (create, update, assignment, storage, lifecycle, retirement, assignment
+  history, audit). Routes that require an `Idempotency-Key` get a UUID when you
+  pass none. Lists return `{ items, hasMore, nextCursor, totalCount }`.
+- Errors: `PhysicalPosCardDataRejectedError` (`field` path only; also thrown
+  before sending when a request or filter has a card-data field such as `pan`,
+  `cardNumber`, `cvv` or `expiry`, or a card number in `merchantReference`, an
+  item name / tax group, or the `merchantReference` / `q` filters),
+  `PhysicalPosRateLimitError` (`retryAfter` from `Retry-After` or
+  `details.retryAfterSeconds`) and `PhysicalPosOutcomeUnknownError`: an attempt
+  without an HTTP answer (also while reading the body), a 2xx without a
+  payment, or a 5xx other than the `PHYSICAL_POS_NOT_STARTED_CODES`; once an
+  attempt was ambiguous the whole call ends with it, whatever a later attempt
+  answered (429 and 409 included). It carries the `idempotencyKey`, the last
+  error as `cause` and `attempts`.
+- Webhooks: `PhysicalPosEvents`, `PHYSICAL_POS_EVENT_TYPES`,
+  `PHYSICAL_POS_EVENT_PATTERN` and `parsePhysicalPosWebhookEvent(rawBody,
+  headers, secretOrVerifier)` / `PhysicalPosClient.parseWebhookEvent()`: the
+  signature is verified inside with `WebhookVerifier`; a decoded envelope is
+  never accepted (`data` or `payloadJson`; webhook amounts are strings).
+- Request values: `null` is sent only to clear a nullable field; an empty
+  optional value is not sent; path ids `.` and `..` are refused; a `Date` in
+  `dateFrom` / `dateTo` is sent as its own calendar day (`YYYY-MM-DD`, not
+  converted to Europe/Istanbul).
+- Shared parity fixture `test/fixtures/physical-pos-parity.json` (card-data
+  terms and cases, card-number values, request fields, filters, keys); the PHP,
+  Java and Python SDKs read byte-identical copies.
+- Values: `PhysicalPosPaymentOperation`, `PhysicalPosPaymentStatus`,
+  `PhysicalPosReversalStatus`, `PHYSICAL_POS_REQUEST_FIELDS`,
+  `PHYSICAL_POS_FILTERS`, `PHYSICAL_POS_NOT_STARTED_CODES`.
+- Sales made directly on the device: `PhysicalPosEvents.PAYMENT_DEVICE_SALE`
+  (`physical_pos.payment.device_sale`, in `PHYSICAL_POS_EVENT_TYPES`) with
+  `PhysicalPosDeviceSaleWebhookData` (`origin: "DEVICE_DIRECT"`,
+  `deviceOccurredAt`). The parsed webhook event gains `isDeviceSale` and
+  `original` (`{ paymentId, origin }` of a reversal's original payment, `null`
+  on a root); `PhysicalPosPaymentWebhookData.original` is typed.
+- `PhysicalPosVoidAfterSettlementError` (409
+  `physical_pos.payment.void_after_settlement`, `allowedOperation`): a payment
+  in a device end-of-day can no longer be voided; refund it instead.
+- Types: `PhysicalPosDevice.presence` (`PhysicalPosDevicePresence`: connection
+  state, last seen, readiness for payment and `notReadyReason`; filled in on
+  `getDevice()` only). `PhysicalPosSettlementLine` gains `settlementRef`,
+  `acquirerRefRaw`, `acquirerName` and `deviceName`; `commandId` is `null` for
+  an end-of-day started on the device. `PhysicalPosCatalogAcquirer` no longer
+  lists `providerCode` (the gateway does not return it).
 
 ## 0.20.1
 

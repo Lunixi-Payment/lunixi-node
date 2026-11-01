@@ -60,19 +60,19 @@ test('checkout intent carries the basket item insurance fields as given', async 
   const { client, calls } = makeClient();
   const insured = {
     id: 'item-1',
-    price: 100000,
+    price: "100000",
     name: 'Izmir-Ankara train ticket',
     category1: 'ticket',
     itemType: BasketItem.TYPE_VIRTUAL,
     insuranceCategory: InsuranceItemCategory.TICKET,
     insuranceTypes: ['TICKET_CANCELLATION'],
     insuranceEligible: true,
-    insuranceValueAmount: 100000,
+    insuranceValueAmount: "100000",
     insuranceContext: { transportMode: 'TRAIN', departureAt: '2025-12-23T12:50:00+03:00', isPromotional: false },
   };
-  const request = new CreateIntentRequest(150000, 'try', 'order-1').withBasketItems([
+  const request = new CreateIntentRequest('150000', 'try', 'order-1').withBasketItems([
     new BasketItem(insured),
-    new BasketItem({ id: 'item-2', price: 50000, name: 'Seat reservation', category1: 'ticket', itemType: 'VIRTUAL' }),
+    new BasketItem({ id: 'item-2', price: "50000", name: 'Seat reservation', category1: 'ticket', itemType: 'VIRTUAL' }),
   ]);
 
   await client.payments.createIntent(request, 'checkout:order-1');
@@ -89,11 +89,11 @@ test('checkout intent carries the basket item insuranceData as given, one type o
   // Synthetic values: a made-up passport number, a sample PNR and ticket number.
   const insuranceData = {
     insured: [{ identityType: 'PASSPORT', identityNumber: 'P0000000', birthDate: '2000-01-01', email: 'insured@example.com' }],
-    tickets: { carrier: 'Sample Rail', priceAmount: 100000, pnr: 'SAMPLE1', ticketNumber: 'SAMPLE-0001' },
+    tickets: { carrier: 'Sample Rail', priceAmount: "100000", pnr: 'SAMPLE1', ticketNumber: 'SAMPLE-0001' },
   };
   const insured = {
     id: 'item-1',
-    price: 100000,
+    price: "100000",
     name: 'Izmir-Ankara train ticket',
     category1: 'ticket',
     itemType: BasketItem.TYPE_VIRTUAL,
@@ -102,8 +102,8 @@ test('checkout intent carries the basket item insuranceData as given, one type o
     insuranceContext: { transportMode: 'TRAIN', departureAt: '2025-12-23T12:50:00+03:00' },
     insuranceData,
   };
-  const plain = { id: 'item-2', price: 50000, name: 'Seat reservation', category1: 'ticket', itemType: 'VIRTUAL', insuranceData: null };
-  const request = new CreateIntentRequest(150000, 'TRY', 'order-1').withBasketItems([new BasketItem(insured), new BasketItem(plain)]);
+  const plain = { id: 'item-2', price: "50000", name: 'Seat reservation', category1: 'ticket', itemType: 'VIRTUAL', insuranceData: null };
+  const request = new CreateIntentRequest('150000', 'TRY', 'order-1').withBasketItems([new BasketItem(insured), new BasketItem(plain)]);
 
   await client.payments.createIntent(request, 'checkout:order-1');
 
@@ -146,7 +146,7 @@ test('capture requires caller-provided stable idempotency key', async () => {
 test('a raw card body without paymentMethod is refused before sending', async () => {
   const { client, calls } = makeClient();
   await assert.rejects(
-    () => client.payments.directMethodPayment({ amount: 1000, currency: 'TRY', orderId: 'o1', card: { cardNumber: 'x' } }, 'idem'),
+    () => client.payments.directMethodPayment({ amount: "1000", currency: 'TRY', orderId: 'o1', card: { cardNumber: 'x' } }, 'idem'),
     ConfigurationError,
   );
   assert.equal(calls.length, 0);
@@ -173,7 +173,7 @@ test('webhook verifier matches the v2 raw-body HMAC contract', () => {
 });
 
 function cardRequest() {
-  return new DirectMethodPaymentRequest(10050, 'TRY', 'ORD-CARD-3D-1')
+  return new DirectMethodPaymentRequest('10050', 'TRY', 'ORD-CARD-3D-1')
     .withCard(new CardDetails({
       cardHolderName: 'Ada Yilmaz',
       cardNumber: '5400000000000004',
@@ -202,7 +202,7 @@ function cardRequest() {
     .withBasketItems([
       new BasketItem({
         id: 'SKU-001',
-        price: 10050,
+        price: "10050",
         name: 'Demo Product',
         category1: 'Demo',
         itemType: BasketItem.TYPE_PHYSICAL,

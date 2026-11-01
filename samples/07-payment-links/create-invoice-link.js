@@ -27,7 +27,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   // Due 14 days after the invoice date, at 23:59:59 Istanbul time (UTC+3).
   const expiresAt = new Date(Date.parse(`${invoiceDate}T20:59:59.000Z`) + 14 * DAY_MS);
 
-  const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, 150000, 'TRY', 'Danışmanlık bedeli')
+  const request = CreatePaymentLinkRequest.fixed(PaymentLinkUsage.SINGLE_USE, '150000', 'TRY', 'Danışmanlık bedeli')
     .withDescription(`Fatura ${invoiceNo}`)
     .withTaxNote('KDV dahil')
     .withExpiresAt(expiresAt)

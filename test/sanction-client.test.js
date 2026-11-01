@@ -132,7 +132,7 @@ test('bodies are checked before sending', async () => {
   await assert.rejects(sanction.screenName({ name: 'Ayla Kurgu', identifiers: [{ type: 'passport' }] }), /identifiers\[0\] requires value/);
   await assert.rejects(sanction.screenWallet({ walletAddress: '0x01', mode: 'full' }), /mode must be one of/);
   await assert.rejects(sanction.screenPublicProcurementBan({ onlyActive: true }), /at least one of entityName, tckn, vkn/);
-  await assert.rejects(sanction.screenTransaction({ amount: 100, currency: 'TRY', parties: [] }), /at least one of parties, accounts/);
+  await assert.rejects(sanction.screenTransaction({ amount: "100", currency: 'TRY', parties: [] }), /at least one of parties, accounts/);
   await assert.rejects(sanction.screenTransaction({ parties: [{ role: 'payer', name: 'Ayla Kurgu', iban: 'x' }] }), /parties\[0\] does not accept iban/);
   assert.equal(calls.length, 0, 'nothing reached the gateway');
 });

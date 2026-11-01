@@ -1,5 +1,7 @@
 'use strict';
 
+const { minor, validateMoneyFields } = require('../money');
+
 const { ConfigurationError } = require('../errors');
 const { BasketItem } = require('../payment/dto');
 const {
@@ -47,7 +49,7 @@ const LEAD_STATUSES = Object.values(InsuranceLeadStatus);
  * 400); the field rules of an insurance type's own object (`insured`,
  * `tickets` …) are not repeated here — a violation comes back as 422
  * `insurance.validation.invalid` with every `details.errors[{ field, reason }]`
- * at once. Amounts are integers in minor units.
+ * at once. Amounts are canonical minor-unit strings.
  */
 class InsuranceClient {
   constructor(api) {
@@ -597,9 +599,7 @@ function requireUuid(value, field) {
 }
 
 function requirePositiveMinor(value, field) {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new ConfigurationError(`'${field}' must be an integer of at least 1 in minor units (4900 = 49.00 TRY).`);
-  }
+  minor(value, field);
   return value;
 }
 
