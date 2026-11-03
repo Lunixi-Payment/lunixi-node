@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-11-03
+
+- Release tooling: the reviewed secret-fixture pin now covers the physical POS parity fixture extended in 1.1.0 (field names only). No SDK behaviour change.
+
 ## 1.1.0 — 2026-11-03
 
 - Physical POS device identity on `client.physicalPosManagement`: `listDeviceKeys()` / `iterateDeviceKeys()` (`GET /devices/{deviceId}/keys`, `physical_pos:view`), `revokeDeviceKey()`, `revertDeviceEnrollment()` and `revokeActivationCode()` (`physical_pos:identity`; no `Idempotency-Key`). Key ids are `pdk_…`, not UUIDs. Activation codes are not issued with an API key (panel only).
