@@ -11,6 +11,7 @@ const {
   unwrap,
   toPage,
   paginate,
+  writeResult,
   send,
   paymentWrite,
 } = require('./physical-pos-request');
@@ -19,8 +20,8 @@ const { parsePhysicalPosWebhookEvent } = require('./physical-pos-webhook');
 const BASE = '/api/v1/physical-pos';
 
 /**
- * Physical POS — payments on your card terminals, transactions, reports and
- * end-of-day results (`/api/v1/physical-pos`, product PHYSICAL_POS).
+ * Physical POS — payments on your card terminals, transactions, reports,
+ * end-of-day runs and results (`/api/v1/physical-pos`, product PHYSICAL_POS).
  *
  * Every call is signed with your API key; the key decides the environment
  * (a TEST key can read but every payment write is 403
@@ -70,6 +71,13 @@ class PhysicalPosClient {
    * Starts a payment on a device: `SALE`, `PREAUTH_OPEN` or
    * `REFUND_UNMATCHED` (`POST /payments`). `target` is exactly one of
    * `{ deviceId }`, `{ vendorCode, serialNumber }` or `{ externalRef }`.
+   *
+   * `instrument` is `CARD` (default) or a provider-collected card such as
+   * `MEAL_CARD`; for those send `interaction` (`INSTRUMENT_READ`: the device
+   * reads the card, `CODE_DISPLAY`: the device shows the provider's QR / short
+   * code) and, when the terminal has several provider rows,
+   * `terminalProviderId` (`listTerminalProviders()` row id). Leave both out for
+   * `CARD`.
    *
    * `idempotencyKey` is required (see the class note). Returns
    * `{ payment, replayed, statusCode, idempotencyKey }`: 202 with
@@ -177,6 +185,45 @@ class PhysicalPosClient {
 
   async *iterateSettlements(filters = {}) {
     yield* paginate((page) => this.listSettlements(page), filters);
+  }
+
+  /**
+   * Starts end-of-day (batch close) on a device
+   * (`POST /devices/{deviceId}/settlement`, `physical_pos:payments`). End-of-day
+   * cannot be undone. The answer means "accepted": the device reports the
+   * result later — follow it with `getSettlementRun()` or `listSettlements()`.
+   *
+   * Returns `{ run, replayed, statusCode (202 new / 200 replay), idempotencyKey }`.
+   * The gateway requires an `Idempotency-Key`: pass the one you stored, or
+   * `null` for a new UUID (returned as `idempotencyKey`; after an unknown
+   * outcome call again with it). A TEST key is refused with 403
+   * `physical_pos.environment.test_key_read_only`.
+   */
+  async startSettlement(deviceId, idempotencyKey = null) {
+    const id = pathId(deviceId, 'deviceId');
+    const key = idempotencyKeyOf(idempotencyKey);
+    const response = await send(this.api, 'POST', `${BASE}/devices/${id}/settlement`, {}, { idempotencyKey: key });
+    return writeResult(response, key, (replayed) => (replayed ? 200 : 202));
+  }
+
+  /**
+   * End-of-day runs started by Lunixi (manual and scheduled), newest first
+   * (`GET /settlement-runs`). Filters: `deviceId`, `source` (MANUAL_API,
+   * MANUAL_PANEL, SCHEDULED), `runStatus` (PENDING, STARTED, SKIPPED, FAILED),
+   * `createdFrom` / `createdTo`, `includeTotal`.
+   */
+  async listSettlementRuns(filters = {}) {
+    return toPage(await send(this.api, 'GET', `${BASE}/settlement-runs`, null, { query: buildQuery(filters, 'listSettlementRuns') }));
+  }
+
+  async *iterateSettlementRuns(filters = {}) {
+    yield* paginate((page) => this.listSettlementRuns(page), filters);
+  }
+
+  /** One end-of-day run with its command status and result state (`GET /settlement-runs/{runId}`). */
+  async getSettlementRun(runId) {
+    const data = unwrap(await send(this.api, 'GET', `${BASE}/settlement-runs/${pathId(runId, 'runId')}`));
+    return data?.run ?? data;
   }
 
   /**

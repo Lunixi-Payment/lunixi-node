@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 — 2026-11-03
+
+- Physical POS end-of-day on `client.physicalPos`: `startSettlement(deviceId, idempotencyKey?)` (`POST /devices/{deviceId}/settlement`, `physical_pos:payments`; empty body, `Idempotency-Key` sent — a new UUID when you pass `null`; 202 new / 200 replay with `{ run, replayed }`), `listSettlementRuns()` / `iterateSettlementRuns()` (`GET /settlement-runs`; filters `deviceId`, `source`, `runStatus`, `createdFrom`, `createdTo`, `includeTotal`) and `getSettlementRun(runId)`.
+- Physical POS end-of-day policy on `client.physicalPosManagement`: `get…`, `set…` and `clear…SettlementPolicy()` for the account, a store and a device (`GET` / `PUT` / `DELETE …/settlement-policy`; `clear…` takes an optional `expectedRowVersion`, sent as a query parameter) and `getEffectiveSettlementPolicy(deviceId)`.
+- Physical POS terminal payment-provider rows on `client.physicalPosManagement`: `listTerminalProviders()` / `iterateTerminalProviders()`, `addTerminalProvider()` (`Idempotency-Key`; 201 / 200) and `updateTerminalProvider()` (`PATCH /terminal-providers/{terminalProviderId}`).
+- `createPayment()` accepts `interaction` (`INSTRUMENT_READ` | `CODE_DISPLAY`) and `terminalProviderId` for provider-collected cards such as `instrument: 'MEAL_CARD'`.
+- Physical POS end-of-day webhooks: `PhysicalPosEvents.SETTLEMENT_COMPLETED`, `SETTLEMENT_FAILED`, `SETTLEMENT_OVERDUE` and `SETTLEMENT_SKIPPED` (`physical_pos.settlement.*`) are in `PHYSICAL_POS_EVENT_TYPES`; `parsePhysicalPosWebhookEvent()` reads them with `category: 'settlement'` (no `historySeq`; deduplicate by `id`). Payload types in `index.d.ts`.
+- Physical POS payment webhooks: the optional `cashier { cashierId, cashierCode }` (only for a payment started from a device cashier session; the key is absent otherwise) is typed and exposed as `event.cashier` (`null` without a cashier).
+- The physical POS parity fixture gained the new field, filter and event lists plus webhook cashier / category cases; the reviewed secret-fixture pin was updated.
+
 ## 1.1.1 — 2026-11-03
 
 - Release tooling: the reviewed secret-fixture pin now covers the physical POS parity fixture extended in 1.1.0 (field names only). No SDK behaviour change.

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = {
     "test/fixtures/webhook-v2-vectors.json": "565c81e8397355ed5c64e36064d345a5617c233841be149ba7336b55b478c94d",
     "test/insurance-client.test.js": "a09a65d068451248643a95bad369cebae204af94a041839a03ee4327b75f101e",
-    "test/fixtures/physical-pos-parity.json": "6c1572921859c63cb0c77a0741db94c939dc8b71c6965778b6a459ab2866d8e3",
+    "test/fixtures/physical-pos-parity.json": "02a9b4e156ff152f92355ce939b6ab5f44c8e8c7195fbdb96fe7cd3be79aee76",
 }
 
 

@@ -53,6 +53,13 @@ const PhysicalPosReversalStatus = Object.freeze({
  * (`origin: "DEVICE_DIRECT"`): it arrives approved, with `deviceOccurredAt`;
  * no `approved` event is sent for it. Its refund comes with the usual payment
  * events (`data.original.origin: "DEVICE_DIRECT"`).
+ *
+ * End-of-day events (`physical_pos.settlement.*`) have their own payloads:
+ * `completed` (the device's result with its bank lines; any source),
+ * `failed` (a scheduled run could not finish in its window), `skipped` (a
+ * scheduled run was skipped for a reason you can fix) and `overdue` (no
+ * result within the policy's threshold). They carry no `historySeq`;
+ * deduplicate by the event id.
  */
 const PhysicalPosEvents = Object.freeze({
   PAYMENT_APPROVED: 'physical_pos.payment.approved',
@@ -68,6 +75,10 @@ const PhysicalPosEvents = Object.freeze({
   FISCAL_DOCUMENT_FAILED: 'physical_pos.fiscal_document.failed',
   FISCAL_DOCUMENT_CANCELLED: 'physical_pos.fiscal_document.cancelled',
   FISCAL_DOCUMENT_ACTION_REQUIRED: 'physical_pos.fiscal_document.action_required',
+  SETTLEMENT_COMPLETED: 'physical_pos.settlement.completed',
+  SETTLEMENT_FAILED: 'physical_pos.settlement.failed',
+  SETTLEMENT_OVERDUE: 'physical_pos.settlement.overdue',
+  SETTLEMENT_SKIPPED: 'physical_pos.settlement.skipped',
 });
 
 const PHYSICAL_POS_EVENT_PATTERN = 'physical_pos.*';
@@ -115,6 +126,8 @@ const PHYSICAL_POS_REQUEST_FIELDS = Object.freeze({
     startTimeoutSeconds: 'int?',
     terminalAcquirerId: 'string?',
     items: 'saleItems',
+    interaction: 'string?',
+    terminalProviderId: 'string?',
   }),
   createReversal: Object.freeze({
     operation: 'string*',
@@ -142,6 +155,10 @@ const PHYSICAL_POS_REQUEST_FIELDS = Object.freeze({
     vendorAcquirerRef: 'string*', merchantNumber: 'string*', terminalNumber: 'string*', label: 'string', currencies: 'strings*',
   }),
   updateTerminalAcquirer: Object.freeze({ rowVersion: 'rowVersion*', label: 'string?', currencies: 'strings', status: 'string' }),
+  addTerminalProvider: Object.freeze({
+    vendorAccountId: 'string*', merchantCode: 'string*', terminalCode: 'string*', productCode: 'string', label: 'string',
+  }),
+  updateTerminalProvider: Object.freeze({ rowVersion: 'rowVersion*', label: 'string?', status: 'string' }),
   changeTerminalDevice: Object.freeze({ rowVersion: 'rowVersion*', deviceId: 'string*', reasonCode: 'string*' }),
   createDevice: Object.freeze({
     vendorCode: 'string*',
@@ -163,6 +180,17 @@ const PHYSICAL_POS_REQUEST_FIELDS = Object.freeze({
   revokeDeviceKey: Object.freeze({ rowVersion: 'rowVersion*', reasonCode: 'string*' }),
   revertDeviceEnrollment: Object.freeze({ reasonCode: 'string*' }),
   revokeActivationCode: Object.freeze({ reasonCode: 'string*' }),
+  setSettlementPolicy: Object.freeze({
+    mode: 'string*',
+    scheduleTime: 'string',
+    timeZone: 'string',
+    scheduleDays: 'strings',
+    retryWindowMinutes: 'int',
+    retryIntervalMinutes: 'int',
+    offlineBehavior: 'string',
+    overdueAlertHours: 'int',
+    expectedRowVersion: 'rowVersion',
+  }),
 });
 
 const PAGE = ['limit', 'cursor'];
@@ -180,11 +208,13 @@ const PHYSICAL_POS_FILTERS = Object.freeze({
   getSalesSummary: Object.freeze([...REPORT, 'groupBy']),
   getTaxSummary: Object.freeze([...REPORT]),
   listSettlements: Object.freeze([...PAGE, 'deviceId', 'lineStatus', 'createdFrom', 'createdTo']),
+  listSettlementRuns: Object.freeze([...ENTITY_PAGE, 'deviceId', 'source', 'runStatus', 'createdFrom', 'createdTo']),
   listDeviceModels: Object.freeze(['vendorCode', 'deviceType', 'status']),
   listStores: Object.freeze([...ENTITY_PAGE, 'status', 'q']),
   listRegisters: Object.freeze([...ENTITY_PAGE, 'status']),
   listTerminals: Object.freeze([...ENTITY_PAGE, 'status', 'q']),
   listTerminalAcquirers: Object.freeze([...ENTITY_PAGE]),
+  listTerminalProviders: Object.freeze([...ENTITY_PAGE]),
   listDevices: Object.freeze([
     ...ENTITY_PAGE, 'storeId', 'registerId', 'vendorCode', 'deviceModelId', 'deviceType', 'lifecycleStatus',
     'ownershipStatus', 'integrationChannel', 'q',

@@ -4364,6 +4364,14 @@ export declare const PhysicalPosEvents: {
   readonly FISCAL_DOCUMENT_FAILED: 'physical_pos.fiscal_document.failed';
   readonly FISCAL_DOCUMENT_CANCELLED: 'physical_pos.fiscal_document.cancelled';
   readonly FISCAL_DOCUMENT_ACTION_REQUIRED: 'physical_pos.fiscal_document.action_required';
+  /** The device's end-of-day result was recorded (any source); `data` is `PhysicalPosSettlementCompletedWebhookData`. */
+  readonly SETTLEMENT_COMPLETED: 'physical_pos.settlement.completed';
+  /** A scheduled end-of-day could not finish in its window; `PhysicalPosSettlementFailedWebhookData`. */
+  readonly SETTLEMENT_FAILED: 'physical_pos.settlement.failed';
+  /** No end-of-day result within the policy's threshold; `PhysicalPosSettlementOverdueWebhookData`. */
+  readonly SETTLEMENT_OVERDUE: 'physical_pos.settlement.overdue';
+  /** A scheduled end-of-day was skipped for a reason you can fix; `PhysicalPosSettlementSkippedWebhookData`. */
+  readonly SETTLEMENT_SKIPPED: 'physical_pos.settlement.skipped';
 };
 export type PhysicalPosEventType = (typeof PhysicalPosEvents)[keyof typeof PhysicalPosEvents];
 export declare const PHYSICAL_POS_EVENT_PATTERN: 'physical_pos.*';
@@ -4411,8 +4419,8 @@ export interface PhysicalPosCreatePaymentRequest {
   currency: string;
   /** null / 0 = single payment; 2–36 (SALE only). */
   installmentCount?: number | null;
-  /** Default CARD. */
-  instrument?: string | null;
+  /** Default CARD; `MEAL_CARD` for a provider-collected meal card. */
+  instrument?: 'CARD' | 'MEAL_CARD' | (string & {}) | null;
   /** ≤ 128 printable ASCII characters without spaces. */
   merchantReference?: string | null;
   allowDuplicateReference?: boolean;
@@ -4422,6 +4430,17 @@ export interface PhysicalPosCreatePaymentRequest {
   terminalAcquirerId?: string | null;
   /** SALE only; leave out for a sale without items. */
   items?: PhysicalPosSaleItem[];
+  /**
+   * Provider-collected cards (MEAL_CARD) only, required there: `INSTRUMENT_READ` — the
+   * device reads the card; `CODE_DISPLAY` — the device shows the provider's QR / short code.
+   * Leave out for CARD.
+   */
+  interaction?: 'INSTRUMENT_READ' | 'CODE_DISPLAY' | (string & {}) | null;
+  /**
+   * Provider-collected cards only: explicit provider row (`listTerminalProviders()` row id).
+   * Left out, the terminal's single active row for the method is used (several → 422).
+   */
+  terminalProviderId?: string | null;
 }
 
 export interface PhysicalPosRefundItem {
@@ -4702,6 +4721,101 @@ export interface PhysicalPosSettlementFilters extends PhysicalPosPageFilters {
   createdTo?: string | Date;
 }
 
+export type PhysicalPosSettlementRunSource = 'MANUAL_API' | 'MANUAL_PANEL' | 'SCHEDULED';
+export type PhysicalPosSettlementRunStatus = 'PENDING' | 'STARTED' | 'SKIPPED' | 'FAILED';
+
+export interface PhysicalPosSettlementRunFilters extends PhysicalPosPageFilters {
+  deviceId?: string;
+  source?: PhysicalPosSettlementRunSource | (string & {});
+  runStatus?: PhysicalPosSettlementRunStatus | (string & {});
+  /** ISO-8601 UTC ending with Z (run creation; default now − 31 days). A Date is sent as `toISOString()`. */
+  createdFrom?: string | Date;
+  /** Default now + 5 minutes. */
+  createdTo?: string | Date;
+  /** Fills `totalCount` (ask on the first page only). */
+  includeTotal?: boolean;
+}
+
+/** An end-of-day run started by Lunixi (manual or scheduled). The device's result lines are in `listSettlements()`. */
+export interface PhysicalPosSettlementRun {
+  runId: string;
+  deviceId: string;
+  environment: string;
+  source: PhysicalPosSettlementRunSource | (string & {});
+  runStatus: PhysicalPosSettlementRunStatus | (string & {});
+  reason: string | null;
+  businessDate: string | null;
+  commandId: string | null;
+  commandStatus: string | null;
+  deliveryPath: string | null;
+  resultState: string | null;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  windowEndsAt: string | null;
+  resultLineCount: number;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PhysicalPosSettlementStartResult = PhysicalPosKeyedResult<{ run: PhysicalPosSettlementRun; replayed: boolean }>;
+
+export type PhysicalPosSettlementMode = 'MANUAL' | 'SCHEDULED' | 'DEVICE_AUTO';
+export type PhysicalPosSettlementWeekday = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+
+/** The full setting of one policy level (a lower level replaces the one above it entirely). */
+export interface PhysicalPosSettlementPolicyRequest {
+  mode: PhysicalPosSettlementMode | (string & {});
+  /** `HH:mm` (24h) — required for SCHEDULED, not allowed otherwise. */
+  scheduleTime?: string;
+  /** IANA time zone (default Europe/Istanbul). */
+  timeZone?: string;
+  /** SCHEDULED only; empty = every day. */
+  scheduleDays?: Array<PhysicalPosSettlementWeekday | (string & {})>;
+  /** SCHEDULED only; 5–720 (default 120). */
+  retryWindowMinutes?: number;
+  /** SCHEDULED only; 1–120 (default 15). */
+  retryIntervalMinutes?: number;
+  /** SCHEDULED only; default RETRY_IN_WINDOW. */
+  offlineBehavior?: 'RETRY_IN_WINDOW' | 'ALERT_IMMEDIATELY' | (string & {});
+  /** 1–168; alert when no result was recorded for this many hours. Leave out to disable. */
+  overdueAlertHours?: number;
+  /** The policy's `rowVersion` you read; leave out for last write wins. */
+  expectedRowVersion?: number;
+}
+
+export interface PhysicalPosSettlementPolicy {
+  scopeType: 'ACCOUNT' | 'STORE' | 'DEVICE' | (string & {});
+  storeId: string | null;
+  deviceId: string | null;
+  /** false: no policy stored at this level (the level inherits; the account defaults to MANUAL). */
+  active: boolean;
+  mode: PhysicalPosSettlementMode | (string & {});
+  scheduleTime: string | null;
+  timeZone: string;
+  scheduleDays: string[];
+  retryWindowMinutes: number | null;
+  retryIntervalMinutes: number | null;
+  offlineBehavior: string | null;
+  overdueAlertHours: number | null;
+  rowVersion: number;
+  updatedAt: string | null;
+}
+
+export interface PhysicalPosEffectiveSettlementPolicy {
+  deviceId: string;
+  /** The level the policy comes from. */
+  sourceScopeType: 'ACCOUNT' | 'STORE' | 'DEVICE' | (string & {});
+  policy: PhysicalPosSettlementPolicy;
+  serverSettlementSupported: boolean;
+  deviceAutoSupported: boolean;
+  nextScheduledAt: string | null;
+  lastSettlementAt: string | null;
+  overdue: boolean;
+  /** e.g. `SCHEDULED_UNSUPPORTED`: SCHEDULED, but the device cannot take end-of-day from the server. */
+  scheduleWarning: string | null;
+}
+
 export interface PhysicalPosSettlementLine {
   /** End-of-day taken with a Lunixi command: the command id; `null` for one started on the device. */
   commandId: string | null;
@@ -4758,6 +4872,82 @@ export interface PhysicalPosPaymentWebhookData {
   historySeq: number;
   /** `MERCHANT` when resolved in the panel. */
   resolvedBy: 'MERCHANT' | null;
+  /** Only on a payment started from a device cashier session (register mode); the key is absent otherwise. No name. */
+  cashier?: PhysicalPosWebhookCashier;
+}
+
+/** The cashier of a payment event (no name or personal data). */
+export interface PhysicalPosWebhookCashier {
+  cashierId: string;
+  cashierCode: string;
+}
+
+/** Counts are numbers, `*Minor` amounts are strings. */
+export interface PhysicalPosSettlementWebhookTotals {
+  saleCount: number;
+  saleMinor: string;
+  refundCount: number;
+  refundMinor: string;
+  voidCount: number;
+  voidMinor: string;
+}
+
+/** `physical_pos.settlement.completed` payload. */
+export interface PhysicalPosSettlementCompletedWebhookData {
+  settlementId: string;
+  /** `null` for an end-of-day started on the device. */
+  runId: string | null;
+  deviceId: string;
+  source: 'MANUAL_API' | 'MANUAL_PANEL' | 'SCHEDULED' | 'DEVICE' | (string & {});
+  late: boolean;
+  periodFrom: string;
+  periodTo: string;
+  deviceClosedAt: string | null;
+  recordedAt: string;
+  lineCount: number;
+  mismatchedLineCount: number;
+  unmappedLineCount: number;
+  lines: Array<{
+    lineNo: number;
+    /** `null` on an `UNMAPPED` line. */
+    acquirerCode: string | null;
+    currency: string;
+    lineStatus: 'MATCHED' | 'MISMATCH' | 'UNMAPPED' | (string & {});
+    reported: PhysicalPosSettlementWebhookTotals;
+    system: PhysicalPosSettlementWebhookTotals;
+  }>;
+}
+
+/** `physical_pos.settlement.failed` payload (scheduled runs only). */
+export interface PhysicalPosSettlementFailedWebhookData {
+  runId: string;
+  deviceId: string;
+  source: 'SCHEDULED';
+  /** `YYYY-MM-DD`. */
+  businessDate: string;
+  reason: 'WINDOW_EXPIRED' | 'DEVICE_OFFLINE' | 'DEVICE_BUSY' | 'PRESENCE_UNAVAILABLE' | 'COMMAND_REJECTED'
+    | 'COMMAND_EXPIRED' | 'INTERNAL_ERROR' | 'RESULT_MISSING' | (string & {});
+  attemptCount: number;
+  windowEndsAt: string;
+  failedAt: string;
+}
+
+/** `physical_pos.settlement.overdue` payload. */
+export interface PhysicalPosSettlementOverdueWebhookData {
+  deviceId: string;
+  businessDate: string;
+  thresholdHours: number;
+  settlementMode: 'MANUAL' | 'SCHEDULED' | 'DEVICE_AUTO' | (string & {});
+  detectedAt: string;
+}
+
+/** `physical_pos.settlement.skipped` payload. */
+export interface PhysicalPosSettlementSkippedWebhookData {
+  runId: string;
+  deviceId: string;
+  businessDate: string;
+  reason: 'SETTLEMENT_UNSUPPORTED' | 'DEVICE_NOT_ACTIVE' | (string & {});
+  skippedAt: string;
 }
 
 /**
@@ -4774,13 +4964,15 @@ export interface PhysicalPosDeviceSaleWebhookData extends PhysicalPosPaymentWebh
 export interface PhysicalPosWebhookEvent<TData = JsonObject> {
   id: string | null;
   type: string;
-  category: 'payment' | 'fiscal_document' | 'other';
+  category: 'payment' | 'fiscal_document' | 'settlement' | 'other';
   environment: string | null;
   createdAt: string | null;
   /** Increases per payment; ignore an event not newer than the last one applied. */
   historySeq: number | null;
   /** `data.original` when it carries `paymentId` and `origin`; `null` on a root payment. */
   original: PhysicalPosWebhookOriginal | null;
+  /** `data.cashier` when it carries `cashierId` and `cashierCode`; `null` without a cashier session. */
+  cashier: PhysicalPosWebhookCashier | null;
   /** `true` for `physical_pos.payment.device_sale`. */
   isDeviceSale: boolean;
   data: TData;
@@ -4826,6 +5018,11 @@ export class PhysicalPosClient {
   getTaxSummary(filters?: PhysicalPosReportFilters): Promise<PhysicalPosTaxSummary>;
   listSettlements(filters?: PhysicalPosSettlementFilters): Promise<PhysicalPosPage<PhysicalPosSettlementLine>>;
   iterateSettlements(filters?: PhysicalPosSettlementFilters): AsyncGenerator<PhysicalPosSettlementLine, void, void>;
+  /** `physical_pos:payments`; 202 new / 200 replay. `null` key → a new UUID (returned as `idempotencyKey`). */
+  startSettlement(deviceId: string, idempotencyKey?: string | null): Promise<PhysicalPosSettlementStartResult>;
+  listSettlementRuns(filters?: PhysicalPosSettlementRunFilters): Promise<PhysicalPosPage<PhysicalPosSettlementRun>>;
+  iterateSettlementRuns(filters?: PhysicalPosSettlementRunFilters): AsyncGenerator<PhysicalPosSettlementRun, void, void>;
+  getSettlementRun(runId: string): Promise<PhysicalPosSettlementRun>;
   static parseWebhookEvent(
     rawBody: string | Buffer,
     headers: Record<string, string | string[] | undefined>,
@@ -4952,6 +5149,24 @@ export interface PhysicalPosTerminalAcquirer {
   source: string;
   acquirerStatus: string;
   lastSyncedAt: string | null;
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A payment-provider row of a terminal (e.g. a meal card provider's merchant / terminal / product code). */
+export interface PhysicalPosTerminalProvider {
+  /** Pass as `terminalProviderId` to choose this provider row for a payment. */
+  id: string;
+  terminalId: string;
+  environment: string;
+  providerCode: string;
+  vendorAccountId: string;
+  merchantCode: string;
+  terminalCode: string;
+  productCode: string | null;
+  label: string | null;
+  providerStatus: 'ACTIVE' | 'DISABLED' | (string & {});
   rowVersion: number;
   createdAt: string;
   updatedAt: string;
@@ -5173,6 +5388,23 @@ export interface PhysicalPosUpdateTerminalAcquirerRequest {
   status?: string;
 }
 
+export interface PhysicalPosAddTerminalProviderRequest {
+  /** Payment-provider vendor account (same environment); the provider comes from it. */
+  vendorAccountId: string;
+  merchantCode: string;
+  terminalCode: string;
+  /** Required by some providers (Metropol ProductId). */
+  productCode?: string;
+  label?: string;
+}
+
+export interface PhysicalPosUpdateTerminalProviderRequest {
+  rowVersion: number;
+  /** `null` clears the label. */
+  label?: string | null;
+  status?: 'ACTIVE' | 'DISABLED' | (string & {});
+}
+
 export interface PhysicalPosCreateDeviceRequest {
   vendorCode: string;
   deviceModelId: string;
@@ -5281,6 +5513,10 @@ export class PhysicalPosManagementClient {
   iterateTerminalAcquirers(terminalId: string, filters?: PhysicalPosEntityListFilters): AsyncGenerator<PhysicalPosTerminalAcquirer, void, void>;
   addTerminalAcquirer(terminalId: string, request: PhysicalPosAddTerminalAcquirerRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ acquirer: PhysicalPosTerminalAcquirer; replayed: boolean }>>;
   updateTerminalAcquirer(terminalAcquirerId: string, request: PhysicalPosUpdateTerminalAcquirerRequest): Promise<PhysicalPosTerminalAcquirer>;
+  listTerminalProviders(terminalId: string, filters?: PhysicalPosEntityListFilters): Promise<PhysicalPosPage<PhysicalPosTerminalProvider>>;
+  iterateTerminalProviders(terminalId: string, filters?: PhysicalPosEntityListFilters): AsyncGenerator<PhysicalPosTerminalProvider, void, void>;
+  addTerminalProvider(terminalId: string, request: PhysicalPosAddTerminalProviderRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ provider: PhysicalPosTerminalProvider; replayed: boolean }>>;
+  updateTerminalProvider(terminalProviderId: string, request: PhysicalPosUpdateTerminalProviderRequest): Promise<PhysicalPosTerminalProvider>;
   changeTerminalDevice(terminalId: string, request: { rowVersion: number; deviceId: string; reasonCode: string }): Promise<{ terminal: PhysicalPosTerminal; link: PhysicalPosDeviceLink }>;
   closeTerminalDeviceLink(terminalId: string, request: PhysicalPosStatusChangeRequest, idempotencyKey?: string | null): Promise<PhysicalPosKeyedResult<{ terminal: PhysicalPosTerminal; link: PhysicalPosDeviceLink | null; replayed: boolean }>>;
   listTerminalLinks(terminalId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosDeviceLink>>;
@@ -5311,6 +5547,21 @@ export class PhysicalPosManagementClient {
   revertDeviceEnrollment(deviceId: string, keyId: string, request: { reasonCode: PhysicalPosEnrollmentRevertReason | string }): Promise<PhysicalPosDeviceKeyWriteResult>;
   /** `physical_pos:identity`. */
   revokeActivationCode(deviceId: string, request: { reasonCode: PhysicalPosActivationCodeRevokeReason | string }): Promise<PhysicalPosActivationCodeRevocation>;
+
+  /** End-of-day policy: reads `physical_pos:view`, writes `physical_pos:manage`. */
+  getAccountSettlementPolicy(): Promise<PhysicalPosSettlementPolicy>;
+  setAccountSettlementPolicy(request: PhysicalPosSettlementPolicyRequest): Promise<PhysicalPosSettlementPolicy>;
+  /** Resets the account level to MANUAL. */
+  clearAccountSettlementPolicy(expectedRowVersion?: number | null): Promise<PhysicalPosSettlementPolicy>;
+  getStoreSettlementPolicy(storeId: string): Promise<PhysicalPosSettlementPolicy>;
+  setStoreSettlementPolicy(storeId: string, request: PhysicalPosSettlementPolicyRequest): Promise<PhysicalPosSettlementPolicy>;
+  /** Removes the store override (its devices inherit the account level). */
+  clearStoreSettlementPolicy(storeId: string, expectedRowVersion?: number | null): Promise<PhysicalPosSettlementPolicy>;
+  getDeviceSettlementPolicy(deviceId: string): Promise<PhysicalPosSettlementPolicy>;
+  setDeviceSettlementPolicy(deviceId: string, request: PhysicalPosSettlementPolicyRequest): Promise<PhysicalPosSettlementPolicy>;
+  /** Removes the device override (it inherits its store / account policy). */
+  clearDeviceSettlementPolicy(deviceId: string, expectedRowVersion?: number | null): Promise<PhysicalPosSettlementPolicy>;
+  getEffectiveSettlementPolicy(deviceId: string): Promise<PhysicalPosEffectiveSettlementPolicy>;
 }
 /** Convert exact decimal text to canonical minor units using the currency exponent. */
 export function decimalToMinor(value: string, currency: string): string;

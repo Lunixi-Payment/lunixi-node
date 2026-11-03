@@ -641,6 +641,7 @@ module.exports = {
   buildBody,
   buildQuery,
   pathId,
+  requireRowVersion,
   newIdempotencyKey,
   idempotencyKeyOf,
   requireIdempotencyKey,

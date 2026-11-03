@@ -28,7 +28,7 @@ const {
   pathId,
 } = require('../src/physical-pos/physical-pos-request');
 const { PAYMENT_TARGET_FIELDS, SALE_ITEM_FIELDS, REFUND_ITEM_FIELDS } = require('../src/physical-pos/physical-pos-values');
-const { originalOf } = require('../src/physical-pos/physical-pos-webhook');
+const { originalOf, cashierOf, categoryOf } = require('../src/physical-pos/physical-pos-webhook');
 const { PHYSICAL_POS_EVENT_TYPES } = require('../src');
 
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'physical-pos-parity.json');
@@ -149,6 +149,15 @@ test('eventTypes', () => {
 test('webhookOriginalCases', () => {
   assert.ok(fixture.webhookOriginalCases.length > 5);
   for (const { name, data, original } of fixture.webhookOriginalCases) assert.deepEqual(originalOf(data), original, name);
+});
+
+test('webhookCashierCases', () => {
+  assert.ok(fixture.webhookCashierCases.length > 5);
+  for (const { name, data, cashier } of fixture.webhookCashierCases) assert.deepEqual(cashierOf(data), cashier, name);
+});
+
+test('webhookCategoryCases', () => {
+  for (const { type, category } of fixture.webhookCategoryCases) assert.equal(categoryOf(type), category, type);
 });
 
 test('notStartedCodes', () => {

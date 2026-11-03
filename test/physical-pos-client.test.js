@@ -4,7 +4,7 @@
  * Contract source: nest-payment-gateway apps/api-gateway/src/physical-pos/
  * (payments/physical-pos-payments-api.controller.ts, payments/dtos/physical-pos-payments.dto.ts,
  * payments/physical-pos-payments.service.ts, payments/physical-pos-payments.mapper.ts,
- * payments/physical-pos-card-data.guard.ts, transactions/*), libs/proto/src/physical-pos-card-data.ts,
+ * payments/physical-pos-card-data.guard.ts, transactions/*, settlements/*), libs/proto/src/physical-pos-card-data.ts,
  * libs/proto/src/physical-pos-webhook.interface.ts. Ids and values below are synthetic.
  */
 
@@ -36,6 +36,8 @@ const TOKEN_PATH = '/api/v1/auth/token';
 const PAYMENT_ID = '0192f3a1-0000-7000-8000-000000000001';
 const CHILD_ID = '0192f3a1-0000-7000-8000-000000000002';
 const DEVICE_ID = '7c1e2d3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+const RUN_ID = '0192f3a1-0000-7000-8000-0000000000e1';
+const TERMINAL_PROVIDER_ID = '0192f3a1-0000-7000-8000-0000000000f1';
 const KEY = 'pos-test-key-0001';
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -173,6 +175,22 @@ test('optional fields are sent as given; null clears nullable fields and drops t
     operation: 'SALE', target: { deviceId: DEVICE_ID }, amountMinor: "1000", currency: 'TRY', installmentCount: 3,
     instrument: null, allowDuplicateReference: true, startTimeoutSeconds: 20, terminalAcquirerId: null,
   });
+});
+
+test('a meal card payment sends instrument, interaction and terminalProviderId', async () => {
+  const { pos, calls } = makeClient(() => jsonResponse(202, envelope({ payment: payment({ instrument: 'MEAL_CARD' }), replayed: false }, { statusCode: 202 })));
+  const request = {
+    operation: 'SALE', target: { deviceId: DEVICE_ID }, amountMinor: '4500', currency: 'TRY', instrument: 'MEAL_CARD',
+    interaction: 'CODE_DISPLAY', terminalProviderId: TERMINAL_PROVIDER_ID,
+  };
+  const result = await pos.createPayment(request, KEY);
+  assert.deepEqual(bodyOf(calls[0]), request);
+  assert.equal(result.payment.instrument, 'MEAL_CARD');
+  await pos.createPayment({ ...request, interaction: null, terminalProviderId: null }, KEY);
+  assert.deepEqual(bodyOf(calls[1]), { ...request, interaction: null, terminalProviderId: null });
+  await assert.rejects(pos.createPayment({ ...request, interaction: 7 }, KEY), ConfigurationError);
+  await assert.rejects(pos.createPayment({ ...request, providerCode: 'METROPOL' }, KEY), ConfigurationError);
+  assert.equal(calls.length, 2);
 });
 
 // ── Card data and request checks (nothing is sent) ───────────────────────────
@@ -423,6 +441,80 @@ test('transactions, ambiguous payments, reports and settlements use their routes
   await assert.rejects(pos.listTransactions({ amountFromMinor: 100 }), ConfigurationError);
 });
 
+// ── End-of-day runs ──────────────────────────────────────────────────────────
+
+const run = (overrides = {}) => ({
+  runId: RUN_ID, deviceId: DEVICE_ID, environment: 'LIVE', source: 'MANUAL_API', runStatus: 'PENDING', reason: null,
+  businessDate: '2026-11-03', commandId: null, commandStatus: null, deliveryPath: null, resultState: null, attemptCount: 0,
+  nextAttemptAt: null, windowEndsAt: null, resultLineCount: 0, completedAt: null, createdAt: '2026-11-03T18:00:00.000Z',
+  updatedAt: '2026-11-03T18:00:00.000Z', ...overrides,
+});
+
+test('startSettlement posts an empty body with the key and reports 202 new / 200 replayed', async () => {
+  let replayed = false;
+  const { pos, calls } = makeClient(() => jsonResponse(replayed ? 200 : 202, { status: 'success', data: { run: run(), replayed } }));
+  const started = await pos.startSettlement(DEVICE_ID, KEY);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(target(calls[0]), `/api/v1/physical-pos/devices/${DEVICE_ID}/settlement`);
+  assert.deepEqual(bodyOf(calls[0]), {});
+  assert.equal(calls[0].headers['Idempotency-Key'], KEY);
+  assert.ok(calls[0].headers['X-Signature']);
+  assert.deepEqual(started, { run: run(), replayed: false, statusCode: 202, idempotencyKey: KEY });
+
+  replayed = true;
+  const again = await pos.startSettlement(DEVICE_ID);
+  assert.match(calls[1].headers['Idempotency-Key'], UUID_V4);
+  assert.equal(again.idempotencyKey, calls[1].headers['Idempotency-Key']);
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.replayed, true);
+
+  await assert.rejects(pos.startSettlement('', KEY), ConfigurationError);
+  await assert.rejects(pos.startSettlement(DEVICE_ID, 'short'), ConfigurationError);
+  assert.equal(calls.length, 2);
+});
+
+test('a TEST key settlement refusal keeps the key on the error', async () => {
+  const { pos } = makeClient(() => jsonResponse(403, failure(403, 'physical_pos.environment.test_key_read_only')));
+  await assert.rejects(pos.startSettlement(DEVICE_ID, KEY), (error) => error instanceof ApiError
+    && error.code === 'physical_pos.environment.test_key_read_only' && error.idempotencyKey === KEY);
+});
+
+test('settlement runs: list with filters, iterate and read one', async () => {
+  const { pos, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path.endsWith(`/settlement-runs/${RUN_ID}`)) return jsonResponse(200, envelope({ run: run({ runStatus: 'STARTED' }) }));
+    if (new URL(call.url).searchParams.get('cursor')) {
+      return jsonResponse(200, envelope({ items: [run({ runId: 'r2' })] }, { pageInfo: { hasMore: false, nextCursor: null } }));
+    }
+    return jsonResponse(200, envelope({ items: [run()] }, { pageInfo: { hasMore: true, nextCursor: 'r1', totalCount: 2 } }));
+  });
+  const page = await pos.listSettlementRuns({
+    limit: 10, deviceId: DEVICE_ID, source: 'SCHEDULED', runStatus: 'FAILED',
+    createdFrom: new Date('2026-11-01T00:00:00.000Z'), createdTo: '2026-11-03T00:00:00.000Z', includeTotal: true,
+  });
+  assert.equal(target(calls[0]), '/api/v1/physical-pos/settlement-runs');
+  assert.deepEqual(queryOf(calls[0]), {
+    limit: '10', includeTotal: 'true', deviceId: DEVICE_ID, source: 'SCHEDULED', runStatus: 'FAILED',
+    createdFrom: '2026-11-01T00:00:00.000Z', createdTo: '2026-11-03T00:00:00.000Z',
+  });
+  assert.deepEqual({ ...page, items: page.items.length }, { items: 1, hasMore: true, nextCursor: 'r1', totalCount: 2 });
+
+  const ids = [];
+  for await (const row of pos.iterateSettlementRuns()) ids.push(row.runId);
+  assert.deepEqual(ids, [RUN_ID, 'r2']);
+  assert.deepEqual(queryOf(calls[2]), { cursor: 'r1' });
+
+  const one = await pos.getSettlementRun(RUN_ID);
+  assert.equal(target(calls[3]), `/api/v1/physical-pos/settlement-runs/${RUN_ID}`);
+  assert.equal(calls[3].headers['Idempotency-Key'], undefined);
+  assert.equal(one.runStatus, 'STARTED');
+
+  await assert.rejects(pos.listSettlementRuns({ lineStatus: 'MATCHED' }), ConfigurationError);
+  await assert.rejects(pos.listSettlementRuns({ includeTotal: 'yes' }), ConfigurationError);
+  await assert.rejects(pos.getSettlementRun('..'), ConfigurationError);
+  assert.equal(calls.length, 4);
+});
+
 // ── Webhook ──────────────────────────────────────────────────────────────────
 
 const SECRET = 'whsec_test_physical_pos';
@@ -449,9 +541,14 @@ const paymentData = () => ({
   tender: { cardMasked: '454360******1234', cardBrand: 'VISA', entryMode: 'CONTACTLESS' }, historySeq: 4, resolvedBy: null,
 });
 
-test('event catalog: 8 payment status, 1 device sale and 4 fiscal document webhooks', () => {
+test('event catalog: 8 payment status, 1 device sale, 4 fiscal document and 4 end-of-day webhooks', () => {
   assert.equal(PHYSICAL_POS_EVENT_PATTERN, 'physical_pos.*');
-  assert.equal(PHYSICAL_POS_EVENT_TYPES.length, 13);
+  assert.equal(PHYSICAL_POS_EVENT_TYPES.length, 17);
+  assert.deepEqual(PHYSICAL_POS_EVENT_TYPES.slice(13), [
+    'physical_pos.settlement.completed', 'physical_pos.settlement.failed', 'physical_pos.settlement.overdue',
+    'physical_pos.settlement.skipped',
+  ]);
+  assert.equal(PhysicalPosEvents.SETTLEMENT_SKIPPED, 'physical_pos.settlement.skipped');
   assert.equal(PhysicalPosEvents.PAYMENT_DEVICE_SALE, 'physical_pos.payment.device_sale');
   assert.ok(PHYSICAL_POS_EVENT_TYPES.includes(PhysicalPosEvents.PAYMENT_DEVICE_SALE));
   assert.equal(PhysicalPosEvents.PAYMENT_PARTIALLY_APPROVED, 'physical_pos.payment.partially_approved');
@@ -476,6 +573,53 @@ test('a signed physical_pos webhook is verified and read from data', () => {
   assert.equal(event.data.tender.cardBrand, 'VISA');
   const viaVerifier = parsePhysicalPosWebhookEvent(Buffer.from(raw), headers, new WebhookVerifier(SECRET));
   assert.equal(viaVerifier.id, 'evt_1');
+  assert.equal(event.cashier, null, 'no cashier session: the key is absent and cashier is null');
+});
+
+test('a payment event from a cashier session carries cashier { cashierId, cashierCode }', () => {
+  const body = {
+    id: 'evt_c1', type: PhysicalPosEvents.PAYMENT_APPROVED, environment: 'LIVE', createdAt: '2026-11-01T09:00:05.000Z',
+    data: { ...paymentData(), cashier: { cashierId: 'cashier_1', cashierCode: 'K01' } },
+  };
+  const { raw, headers } = signed(body, 'evt_c1');
+  const event = PhysicalPosClient.parseWebhookEvent(raw, headers, SECRET);
+  assert.deepEqual(event.cashier, { cashierId: 'cashier_1', cashierCode: 'K01' });
+  assert.deepEqual(event.data.cashier, { cashierId: 'cashier_1', cashierCode: 'K01' });
+});
+
+test('end-of-day webhooks are read with category settlement and string amounts', () => {
+  const totals = { saleCount: 42, saleMinor: '1284050', refundCount: 1, refundMinor: '15000', voidCount: 0, voidMinor: '0' };
+  const completed = {
+    id: 'evt_s1', type: PhysicalPosEvents.SETTLEMENT_COMPLETED, environment: 'LIVE', createdAt: '2026-11-03T20:15:41.307Z',
+    data: {
+      settlementId: 'set_1', runId: 'run_1', deviceId: DEVICE_ID, source: 'MANUAL_API', late: false,
+      periodFrom: '2026-11-02T20:31:12.004Z', periodTo: '2026-11-03T20:15:40.220Z', deviceClosedAt: null,
+      recordedAt: '2026-11-03T20:15:41.307Z', lineCount: 1, mismatchedLineCount: 0, unmappedLineCount: 0,
+      lines: [{ lineNo: 1, acquirerCode: 'BANK1', currency: 'TRY', lineStatus: 'MATCHED', reported: totals, system: totals }],
+    },
+  };
+  let signedBody = signed(completed, 'evt_s1');
+  const event = PhysicalPosClient.parseWebhookEvent(signedBody.raw, signedBody.headers, SECRET);
+  assert.equal(event.category, 'settlement');
+  assert.equal(event.historySeq, null);
+  assert.equal(event.cashier, null);
+  assert.equal(event.data.lines[0].reported.saleMinor, '1284050');
+
+  const failed = {
+    id: 'evt_s2', type: PhysicalPosEvents.SETTLEMENT_FAILED,
+    payloadJson: JSON.stringify({
+      runId: 'run_2', deviceId: DEVICE_ID, source: 'SCHEDULED', businessDate: '2026-11-02', reason: 'DEVICE_OFFLINE',
+      attemptCount: 7, windowEndsAt: '2026-11-02T22:30:00.000Z', failedAt: '2026-11-02T22:28:00.112Z',
+    }),
+  };
+  signedBody = signed(failed, 'evt_s2');
+  const failure = PhysicalPosClient.parseWebhookEvent(signedBody.raw, signedBody.headers, SECRET);
+  assert.equal(failure.category, 'settlement');
+  assert.equal(failure.data.reason, 'DEVICE_OFFLINE');
+
+  const numeric = { ...completed, id: 'evt_s3', data: { ...completed.data, lines: [{ ...completed.data.lines[0], system: { ...totals, saleMinor: 1284050 } }] } };
+  signedBody = signed(numeric, 'evt_s3');
+  assert.throws(() => PhysicalPosClient.parseWebhookEvent(signedBody.raw, signedBody.headers, SECRET), ConfigurationError);
 });
 
 test('a device sale and a refund of it are read with isDeviceSale and original', () => {

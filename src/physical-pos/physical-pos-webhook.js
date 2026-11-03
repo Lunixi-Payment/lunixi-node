@@ -25,6 +25,11 @@ const DEVICE_SALE = 'physical_pos.payment.device_sale';
  *
  * `original` is the reversal's original payment `{ paymentId, origin }`
  * (`origin`: `API` or `DEVICE_DIRECT`), `null` on a root payment.
+ * `cashier` is `{ cashierId, cashierCode }` for a payment started from a
+ * device cashier session (register mode), otherwise `null` (the payload then
+ * has no `cashier` key). `category` is `payment`, `fiscal_document`,
+ * `settlement` (`physical_pos.settlement.*`) or `other`; end-of-day events
+ * carry no `historySeq`, deduplicate them by `id`.
  * `isDeviceSale` is `true` for `physical_pos.payment.device_sale`, a sale
  * made directly on the device (`data.origin`, `data.deviceOccurredAt`).
  *
@@ -63,6 +68,7 @@ function parsePhysicalPosWebhookEvent(rawBody, headers, secretOrVerifier, option
     createdAt: firstText(envelope.createdAt, envelope.occurredAt, envelope.timestamp),
     historySeq: Number.isSafeInteger(data.historySeq) ? data.historySeq : null,
     original: originalOf(data),
+    cashier: cashierOf(data),
     isDeviceSale: type === DEVICE_SALE,
     data,
     raw: envelope,
@@ -96,9 +102,23 @@ function originalOf(data) {
   return paymentId && origin ? { paymentId, origin } : null;
 }
 
+/**
+ * The cashier of a payment event: `{ cashierId, cashierCode }` when
+ * `data.cashier` carries both as non-empty strings (other keys are dropped);
+ * otherwise `null` (no cashier session — the key is absent).
+ */
+function cashierOf(data) {
+  const cashier = data ? data.cashier : null;
+  if (cashier === null || typeof cashier !== 'object' || Array.isArray(cashier)) return null;
+  const cashierId = firstText(cashier.cashierId);
+  const cashierCode = firstText(cashier.cashierCode);
+  return cashierId && cashierCode ? { cashierId, cashierCode } : null;
+}
+
 function categoryOf(type) {
   if (type.startsWith('physical_pos.payment.')) return 'payment';
   if (type.startsWith('physical_pos.fiscal_document.')) return 'fiscal_document';
+  if (type.startsWith('physical_pos.settlement.')) return 'settlement';
   return 'other';
 }
 
@@ -111,4 +131,4 @@ function firstText(...values) {
   return null;
 }
 
-module.exports = { parsePhysicalPosWebhookEvent, originalOf };
+module.exports = { parsePhysicalPosWebhookEvent, originalOf, cashierOf, categoryOf };

@@ -11,6 +11,7 @@ const {
   paginate,
   writeResult,
   send,
+  requireRowVersion,
 } = require('./physical-pos-request');
 
 const BASE = '/api/v1/physical-pos';
@@ -19,8 +20,9 @@ const OK = () => 200;
 
 /**
  * Physical POS management — stores, registers, logical terminals with their
- * bank rows and device links, devices with their identity keys, the catalog
- * and the overview (`/api/v1/physical-pos`). Reads need `physical_pos:view`,
+ * bank rows, payment-provider rows and device links, devices with their
+ * identity keys, the end-of-day policy, the catalog and the overview
+ * (`/api/v1/physical-pos`). Reads need `physical_pos:view`,
  * writes `physical_pos:manage`, device identity writes (key revocation,
  * enrollment revert, activation-code revocation) `physical_pos:identity`; a
  * TEST key can only read. Activation codes are issued in the panel only.
@@ -193,6 +195,35 @@ class PhysicalPosManagementClient {
     return this.record('PATCH', path, buildBody(request, FIELDS.updateTerminalAcquirer, 'updateTerminalAcquirer request'), 'acquirer');
   }
 
+  /**
+   * Payment-provider rows of a terminal (e.g. a meal card provider's merchant /
+   * terminal / product code). A row's `id` is the payment's `terminalProviderId`.
+   */
+  async listTerminalProviders(terminalId, filters = {}) {
+    const path = `/terminals/${pathId(terminalId, 'terminalId')}/providers`;
+    return toPage(await this.read(path, buildQuery(filters, 'listTerminalProviders')));
+  }
+
+  async *iterateTerminalProviders(terminalId, filters = {}) {
+    yield* paginate((page) => this.listTerminalProviders(terminalId, page), filters);
+  }
+
+  /**
+   * Adds a provider row: `{ vendorAccountId, merchantCode, terminalCode,
+   * productCode?, label? }`; the provider comes from the vendor account.
+   * `{ provider, replayed, statusCode (201 new / 200 replay), idempotencyKey }`.
+   */
+  async addTerminalProvider(terminalId, request, idempotencyKey = null) {
+    const path = `/terminals/${pathId(terminalId, 'terminalId')}/providers`;
+    return this.keyedWrite(path, buildBody(request, FIELDS.addTerminalProvider, 'addTerminalProvider request'), idempotencyKey, CREATED);
+  }
+
+  /** `{ rowVersion, label?, status? }`; `null` label clears it, `status` ACTIVE or DISABLED. */
+  async updateTerminalProvider(terminalProviderId, request) {
+    const path = `/terminal-providers/${pathId(terminalProviderId, 'terminalProviderId')}`;
+    return this.record('PATCH', path, buildBody(request, FIELDS.updateTerminalProvider, 'updateTerminalProvider request'), 'provider');
+  }
+
   /** Links the terminal to a device (closing the previous link): `{ terminal, link }`. */
   async changeTerminalDevice(terminalId, request) {
     const path = `/terminals/${pathId(terminalId, 'terminalId')}/device-link`;
@@ -333,6 +364,65 @@ class PhysicalPosManagementClient {
     return unwrap(await this.post(path, buildBody(request, FIELDS.revokeActivationCode, 'revokeActivationCode request')));
   }
 
+  // ── End-of-day policy (account → store → device) ─────────────────────────
+  //
+  // A level's policy replaces the level above it entirely. `set…` sends the
+  // full setting: `{ mode (MANUAL | SCHEDULED | DEVICE_AUTO), scheduleTime?,
+  // timeZone?, scheduleDays?, retryWindowMinutes?, retryIntervalMinutes?,
+  // offlineBehavior?, overdueAlertHours?, expectedRowVersion? }`. `clear…`
+  // resets the account to MANUAL, or removes a store / device override (it then
+  // inherits). `expectedRowVersion` is the policy's `rowVersion` you read (409
+  // `physical_pos.version_conflict` when it changed); leave it out for last
+  // write wins. Each call returns the `policy`.
+
+  async getAccountSettlementPolicy() {
+    return this.policy('GET', '/settlement-policy');
+  }
+
+  async setAccountSettlementPolicy(request) {
+    return this.policy('PUT', '/settlement-policy', settlementPolicy(request, 'setAccountSettlementPolicy'));
+  }
+
+  async clearAccountSettlementPolicy(expectedRowVersion = null) {
+    return this.policy('DELETE', '/settlement-policy', null, expectedRowVersionQuery(expectedRowVersion));
+  }
+
+  async getStoreSettlementPolicy(storeId) {
+    return this.policy('GET', storePolicyPath(storeId));
+  }
+
+  async setStoreSettlementPolicy(storeId, request) {
+    return this.policy('PUT', storePolicyPath(storeId), settlementPolicy(request, 'setStoreSettlementPolicy'));
+  }
+
+  async clearStoreSettlementPolicy(storeId, expectedRowVersion = null) {
+    return this.policy('DELETE', storePolicyPath(storeId), null, expectedRowVersionQuery(expectedRowVersion));
+  }
+
+  async getDeviceSettlementPolicy(deviceId) {
+    return this.policy('GET', devicePolicyPath(deviceId));
+  }
+
+  /** DEVICE_AUTO only on devices that report their end-of-day results. */
+  async setDeviceSettlementPolicy(deviceId, request) {
+    return this.policy('PUT', devicePolicyPath(deviceId), settlementPolicy(request, 'setDeviceSettlementPolicy'));
+  }
+
+  async clearDeviceSettlementPolicy(deviceId, expectedRowVersion = null) {
+    return this.policy('DELETE', devicePolicyPath(deviceId), null, expectedRowVersionQuery(expectedRowVersion));
+  }
+
+  /**
+   * The policy a device follows (`GET /devices/{deviceId}/settlement-policy/effective`):
+   * `{ deviceId, sourceScopeType (ACCOUNT | STORE | DEVICE), policy,
+   * serverSettlementSupported, deviceAutoSupported, nextScheduledAt,
+   * lastSettlementAt, overdue, scheduleWarning }`.
+   */
+  async getEffectiveSettlementPolicy(deviceId) {
+    const data = unwrap(await this.read(`${devicePolicyPath(deviceId)}/effective`));
+    return data?.effective ?? data;
+  }
+
   // ── Transport ────────────────────────────────────────────────────────────
 
   read(path, query) {
@@ -348,6 +438,11 @@ class PhysicalPosManagementClient {
     return data?.[name] ?? data;
   }
 
+  async policy(method, path, body = null, query = undefined) {
+    const data = unwrap(await send(this.api, method, `${BASE}${path}`, body, { query }));
+    return data?.policy ?? data;
+  }
+
   async keyedWrite(path, body, idempotencyKey, fallbackStatus) {
     const key = idempotencyKeyOf(idempotencyKey);
     const response = await send(this.api, 'POST', `${BASE}${path}`, body, { idempotencyKey: key });
@@ -357,6 +452,24 @@ class PhysicalPosManagementClient {
 
 function keyPath(deviceId, keyId) {
   return `/devices/${pathId(deviceId, 'deviceId')}/keys/${pathId(keyId, 'keyId')}`;
+}
+
+function storePolicyPath(storeId) {
+  return `/stores/${pathId(storeId, 'storeId')}/settlement-policy`;
+}
+
+function devicePolicyPath(deviceId) {
+  return `/devices/${pathId(deviceId, 'deviceId')}/settlement-policy`;
+}
+
+function settlementPolicy(request, operation) {
+  return buildBody(request, FIELDS.setSettlementPolicy, `${operation} request`);
+}
+
+/** `DELETE …/settlement-policy?expectedRowVersion=` — left out when null. */
+function expectedRowVersionQuery(expectedRowVersion) {
+  if (expectedRowVersion === null || expectedRowVersion === undefined) return {};
+  return { expectedRowVersion: String(requireRowVersion(expectedRowVersion, 'expectedRowVersion')) };
 }
 
 function statusChange(request, operation) {

@@ -767,7 +767,9 @@
       "allowDuplicateReference",
       "startTimeoutSeconds",
       "terminalAcquirerId",
-      "items"
+      "items",
+      "interaction",
+      "terminalProviderId"
     ],
     "paymentTarget": [
       "deviceId",
@@ -854,6 +856,18 @@
       "currencies",
       "status"
     ],
+    "addTerminalProvider": [
+      "vendorAccountId",
+      "merchantCode",
+      "terminalCode",
+      "productCode",
+      "label"
+    ],
+    "updateTerminalProvider": [
+      "rowVersion",
+      "label",
+      "status"
+    ],
     "changeTerminalDevice": [
       "rowVersion",
       "deviceId",
@@ -899,6 +913,17 @@
     ],
     "revokeActivationCode": [
       "reasonCode"
+    ],
+    "setSettlementPolicy": [
+      "mode",
+      "scheduleTime",
+      "timeZone",
+      "scheduleDays",
+      "retryWindowMinutes",
+      "retryIntervalMinutes",
+      "offlineBehavior",
+      "overdueAlertHours",
+      "expectedRowVersion"
     ]
   },
   "filters": {
@@ -953,6 +978,16 @@
       "createdFrom",
       "createdTo"
     ],
+    "listSettlementRuns": [
+      "limit",
+      "cursor",
+      "includeTotal",
+      "deviceId",
+      "source",
+      "runStatus",
+      "createdFrom",
+      "createdTo"
+    ],
     "listDeviceModels": [
       "vendorCode",
       "deviceType",
@@ -979,6 +1014,11 @@
       "q"
     ],
     "listTerminalAcquirers": [
+      "limit",
+      "cursor",
+      "includeTotal"
+    ],
+    "listTerminalProviders": [
       "limit",
       "cursor",
       "includeTotal"
@@ -1038,7 +1078,11 @@
     "physical_pos.fiscal_document.issued",
     "physical_pos.fiscal_document.failed",
     "physical_pos.fiscal_document.cancelled",
-    "physical_pos.fiscal_document.action_required"
+    "physical_pos.fiscal_document.action_required",
+    "physical_pos.settlement.completed",
+    "physical_pos.settlement.failed",
+    "physical_pos.settlement.overdue",
+    "physical_pos.settlement.skipped"
   ],
   "webhookOriginalCases": [
     {
@@ -1151,6 +1195,127 @@
         ]
       },
       "original": null
+    }
+  ],
+  "webhookCashierCases": [
+    {
+      "name": "absent",
+      "data": {},
+      "cashier": null
+    },
+    {
+      "name": "null",
+      "data": {
+        "cashier": null
+      },
+      "cashier": null
+    },
+    {
+      "name": "cashier",
+      "data": {
+        "cashier": {
+          "cashierId": "c0",
+          "cashierCode": "K01"
+        }
+      },
+      "cashier": {
+        "cashierId": "c0",
+        "cashierCode": "K01"
+      }
+    },
+    {
+      "name": "extra keys dropped",
+      "data": {
+        "cashier": {
+          "cashierId": "c0",
+          "cashierCode": "K01",
+          "displayName": "Till 1"
+        }
+      },
+      "cashier": {
+        "cashierId": "c0",
+        "cashierCode": "K01"
+      }
+    },
+    {
+      "name": "code missing",
+      "data": {
+        "cashier": {
+          "cashierId": "c0"
+        }
+      },
+      "cashier": null
+    },
+    {
+      "name": "empty id",
+      "data": {
+        "cashier": {
+          "cashierId": "",
+          "cashierCode": "K01"
+        }
+      },
+      "cashier": null
+    },
+    {
+      "name": "code not a string",
+      "data": {
+        "cashier": {
+          "cashierId": "c0",
+          "cashierCode": 1
+        }
+      },
+      "cashier": null
+    },
+    {
+      "name": "not an object",
+      "data": {
+        "cashier": "c0"
+      },
+      "cashier": null
+    },
+    {
+      "name": "list",
+      "data": {
+        "cashier": [
+          "c0",
+          "K01"
+        ]
+      },
+      "cashier": null
+    }
+  ],
+  "webhookCategoryCases": [
+    {
+      "type": "physical_pos.payment.approved",
+      "category": "payment"
+    },
+    {
+      "type": "physical_pos.payment.device_sale",
+      "category": "payment"
+    },
+    {
+      "type": "physical_pos.fiscal_document.issued",
+      "category": "fiscal_document"
+    },
+    {
+      "type": "physical_pos.settlement.completed",
+      "category": "settlement"
+    },
+    {
+      "type": "physical_pos.settlement.failed",
+      "category": "settlement"
+    },
+    {
+      "type": "physical_pos.settlement.overdue",
+      "category": "settlement"
+    },
+    {
+      "type": "physical_pos.settlement.skipped",
+      "category": "settlement"
+    },
+    {
+      "type": "physical_pos.device.offline",
+      "category": "other"
     }
   ]
 }
