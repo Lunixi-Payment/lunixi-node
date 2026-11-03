@@ -60,10 +60,13 @@ const store = (overrides = {}) => ({
 
 const device = (overrides = {}) => ({ id: DEVICE_ID, serialNumber: 'PAV00012345', lifecycleStatus: 'ACTIVE', rowVersion: 3, ...overrides });
 
-test('client is exposed and leaves the device identity routes out', () => {
+test('client is exposed; activation codes are not issued with an API key (K-94)', () => {
   const { mgmt } = makeClient(() => jsonResponse(200, envelope({})));
   assert.ok(mgmt instanceof PhysicalPosManagementClient);
-  for (const name of ['issueActivationCode', 'revokeActivationCode', 'listDeviceKeys', 'revokeDeviceKey']) assert.equal(mgmt[name], undefined);
+  assert.equal(mgmt.issueActivationCode, undefined);
+  for (const name of ['listDeviceKeys', 'iterateDeviceKeys', 'revokeDeviceKey', 'revertDeviceEnrollment', 'revokeActivationCode']) {
+    assert.equal(typeof mgmt[name], 'function', name);
+  }
 });
 
 test('overview and catalog reads unwrap data; device model filters are checked', async () => {
@@ -252,6 +255,72 @@ test('devices: create, read, update, assignment, lifecycle and retirement', asyn
     `/api/v1/physical-pos/devices/${DEVICE_ID}/assignments`,
     `/api/v1/physical-pos/devices/${DEVICE_ID}/audit`,
   ]);
+});
+
+const DEVICE_KEY_ID = 'pdk_AAAAAAAAAAAAAAAAAAAAAAAA';
+const deviceKey = (overrides = {}) => ({
+  keyId: DEVICE_KEY_ID, algorithm: 'ED25519', keyStatus: 'ACTIVE', enrolledVia: 'PAIRING', fingerprint: 'ABCD-EF12',
+  lineageRootKeyId: DEVICE_KEY_ID, rotatedFromKeyId: null, activatedAt: '2026-11-01T09:00:00.000Z', supersededAt: null,
+  revokedAt: null, revokeReason: null, rowVersion: 1, ...overrides,
+});
+
+test('device identity: keys page, key revocation, enrollment revert, activation-code revocation', async () => {
+  const { mgmt, calls } = makeClient((call) => {
+    const path = target(call);
+    if (path.endsWith('/keys')) return jsonResponse(200, envelope({ items: [deviceKey()] }, { pageInfo: { hasMore: true, nextCursor: 'k1' } }));
+    if (path.endsWith('/activation-code/revoke')) {
+      return jsonResponse(200, envelope({ deviceId: DEVICE_ID, revokedAt: '2026-11-02T09:00:00.000Z', revokeReason: 'MERCHANT_REVOKED' }));
+    }
+    return jsonResponse(200, envelope({
+      key: deviceKey({ keyStatus: 'REVOKED', revokedAt: '2026-11-02T09:00:00.000Z', revokeReason: 'DEVICE_LOST', rowVersion: 2 }),
+      lifecycleStatus: 'SUSPENDED',
+      replayed: false,
+    }));
+  });
+  const page = await mgmt.listDeviceKeys(DEVICE_ID, { limit: 10 });
+  assert.equal(page.items[0].keyId, DEVICE_KEY_ID);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.nextCursor, 'k1');
+  assert.equal(target(calls[0]), `/api/v1/physical-pos/devices/${DEVICE_ID}/keys`);
+  assert.deepEqual(queryOf(calls[0]), { limit: '10' });
+
+  const revoked = await mgmt.revokeDeviceKey(DEVICE_ID, DEVICE_KEY_ID, { rowVersion: 1, reasonCode: 'DEVICE_LOST' });
+  assert.equal(calls[1].method, 'POST');
+  assert.equal(target(calls[1]), `/api/v1/physical-pos/devices/${DEVICE_ID}/keys/${DEVICE_KEY_ID}/revoke`);
+  assert.deepEqual(bodyOf(calls[1]), { rowVersion: 1, reasonCode: 'DEVICE_LOST' });
+  assert.equal(calls[1].headers['Idempotency-Key'], undefined);
+  assert.equal(revoked.key.keyStatus, 'REVOKED');
+  assert.equal(revoked.lifecycleStatus, 'SUSPENDED');
+  assert.equal(revoked.replayed, false);
+
+  await mgmt.revertDeviceEnrollment(DEVICE_ID, DEVICE_KEY_ID, { reasonCode: 'NOT_MY_DEVICE' });
+  assert.equal(target(calls[2]), `/api/v1/physical-pos/devices/${DEVICE_ID}/keys/${DEVICE_KEY_ID}/revert-enrollment`);
+  assert.deepEqual(bodyOf(calls[2]), { reasonCode: 'NOT_MY_DEVICE' });
+  assert.equal(calls[2].headers['Idempotency-Key'], undefined);
+
+  const code = await mgmt.revokeActivationCode(DEVICE_ID, { reasonCode: 'MERCHANT_REVOKED' });
+  assert.equal(target(calls[3]), `/api/v1/physical-pos/devices/${DEVICE_ID}/activation-code/revoke`);
+  assert.deepEqual(bodyOf(calls[3]), { reasonCode: 'MERCHANT_REVOKED' });
+  assert.equal(calls[3].headers['Idempotency-Key'], undefined);
+  assert.deepEqual(code, { deviceId: DEVICE_ID, revokedAt: '2026-11-02T09:00:00.000Z', revokeReason: 'MERCHANT_REVOKED' });
+
+  await assert.rejects(mgmt.revokeDeviceKey(DEVICE_ID, DEVICE_KEY_ID, { rowVersion: '1', reasonCode: 'OTHER' }), ConfigurationError);
+  await assert.rejects(mgmt.revokeDeviceKey(DEVICE_ID, DEVICE_KEY_ID, { reasonCode: 'OTHER' }), ConfigurationError);
+  await assert.rejects(mgmt.revokeDeviceKey(DEVICE_ID, '', { rowVersion: 1, reasonCode: 'OTHER' }), ConfigurationError);
+  await assert.rejects(mgmt.revertDeviceEnrollment(DEVICE_ID, DEVICE_KEY_ID, { reasonCode: 'OTHER', rowVersion: 1 }), ConfigurationError);
+  await assert.rejects(mgmt.revokeActivationCode(DEVICE_ID, {}), ConfigurationError);
+  await assert.rejects(mgmt.listDeviceKeys(DEVICE_ID, { includeTotal: true }), ConfigurationError);
+  assert.equal(calls.length, 4);
+});
+
+test('iterateDeviceKeys follows nextCursor', async () => {
+  const { mgmt, calls } = makeClient((call) => (new URL(call.url).searchParams.get('cursor')
+    ? jsonResponse(200, envelope({ items: [deviceKey({ keyId: 'pdk_BBBBBBBBBBBBBBBBBBBBBBBB' })] }, { pageInfo: { hasMore: false, nextCursor: null } }))
+    : jsonResponse(200, envelope({ items: [deviceKey()] }, { pageInfo: { hasMore: true, nextCursor: 'k1' } }))));
+  const ids = [];
+  for await (const key of mgmt.iterateDeviceKeys(DEVICE_ID)) ids.push(key.keyId);
+  assert.deepEqual(ids, [DEVICE_KEY_ID, 'pdk_BBBBBBBBBBBBBBBBBBBBBBBB']);
+  assert.deepEqual(queryOf(calls[1]), { cursor: 'k1' });
 });
 
 test('iterateStores follows nextCursor', async () => {

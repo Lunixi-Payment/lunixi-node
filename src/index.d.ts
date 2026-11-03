@@ -5208,6 +5208,43 @@ export interface PhysicalPosDeviceFilters extends PhysicalPosEntityListFilters {
   q?: string;
 }
 
+/** A device identity key (fingerprint only; the public key is never returned). */
+export interface PhysicalPosDeviceKey {
+  /** `pdk_` + 24 base64url characters (not a UUID). */
+  keyId: string;
+  algorithm: 'ED25519' | string;
+  keyStatus: 'ACTIVE' | 'SUPERSEDED' | 'REVOKED' | string;
+  enrolledVia: 'PAIRING' | 'ACTIVATION_CODE' | 'ROTATION' | string;
+  /** Short fingerprint `XXXX-XXXX`. */
+  fingerprint: string;
+  lineageRootKeyId: string;
+  rotatedFromKeyId: string | null;
+  activatedAt: string;
+  supersededAt: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  rowVersion: number;
+}
+
+export type PhysicalPosDeviceKeyRevokeReason =
+  | 'DEVICE_LOST' | 'DEVICE_STOLEN' | 'KEY_COMPROMISED' | 'DEVICE_REPLACED' | 'MERCHANT_REQUEST' | 'OTHER';
+export type PhysicalPosEnrollmentRevertReason = 'NOT_MY_DEVICE' | 'SUSPECTED_PHISHING' | 'WRONG_DEVICE' | 'OTHER';
+export type PhysicalPosActivationCodeRevokeReason = 'MERCHANT_REVOKED' | 'DEVICE_LOST' | 'DEVICE_STOLEN' | 'OTHER';
+
+/** Answer of a key revocation or enrollment revert. */
+export interface PhysicalPosDeviceKeyWriteResult {
+  key: PhysicalPosDeviceKey;
+  /** The device's lifecycle status after the write. */
+  lifecycleStatus: string;
+  replayed: boolean;
+}
+
+export interface PhysicalPosActivationCodeRevocation {
+  deviceId: string;
+  revokedAt: string;
+  revokeReason: string;
+}
+
 export class PhysicalPosManagementClient {
   constructor(api: ApiClient);
   getOverview(): Promise<PhysicalPosOverview>;
@@ -5264,6 +5301,16 @@ export class PhysicalPosManagementClient {
   iterateDeviceAssignments(deviceId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosDeviceAssignment, void, void>;
   listDeviceAudit(deviceId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosAuditEvent>>;
   iterateDeviceAudit(deviceId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosAuditEvent, void, void>;
+
+  /** `physical_pos:view`. */
+  listDeviceKeys(deviceId: string, filters?: PhysicalPosPageFilters): Promise<PhysicalPosPage<PhysicalPosDeviceKey>>;
+  iterateDeviceKeys(deviceId: string, filters?: PhysicalPosPageFilters): AsyncGenerator<PhysicalPosDeviceKey, void, void>;
+  /** `physical_pos:identity`; `rowVersion` is the key's. */
+  revokeDeviceKey(deviceId: string, keyId: string, request: { rowVersion: number; reasonCode: PhysicalPosDeviceKeyRevokeReason | string }): Promise<PhysicalPosDeviceKeyWriteResult>;
+  /** `physical_pos:identity`; revokes the key and suspends the device. */
+  revertDeviceEnrollment(deviceId: string, keyId: string, request: { reasonCode: PhysicalPosEnrollmentRevertReason | string }): Promise<PhysicalPosDeviceKeyWriteResult>;
+  /** `physical_pos:identity`. */
+  revokeActivationCode(deviceId: string, request: { reasonCode: PhysicalPosActivationCodeRevokeReason | string }): Promise<PhysicalPosActivationCodeRevocation>;
 }
 /** Convert exact decimal text to canonical minor units using the currency exponent. */
 export function decimalToMinor(value: string, currency: string): string;

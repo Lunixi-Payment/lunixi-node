@@ -889,6 +889,16 @@
       "rowVersion",
       "target",
       "reasonCode"
+    ],
+    "revokeDeviceKey": [
+      "rowVersion",
+      "reasonCode"
+    ],
+    "revertDeviceEnrollment": [
+      "reasonCode"
+    ],
+    "revokeActivationCode": [
+      "reasonCode"
     ]
   },
   "filters": {

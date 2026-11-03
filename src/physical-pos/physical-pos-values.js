@@ -160,6 +160,9 @@ const PHYSICAL_POS_REQUEST_FIELDS = Object.freeze({
   }),
   assignDevice: Object.freeze({ rowVersion: 'rowVersion*', storeId: 'string*', registerId: 'string?', reasonCode: 'string*' }),
   changeDeviceLifecycle: Object.freeze({ rowVersion: 'rowVersion*', target: 'string*', reasonCode: 'string*' }),
+  revokeDeviceKey: Object.freeze({ rowVersion: 'rowVersion*', reasonCode: 'string*' }),
+  revertDeviceEnrollment: Object.freeze({ reasonCode: 'string*' }),
+  revokeActivationCode: Object.freeze({ reasonCode: 'string*' }),
 });
 
 const PAGE = ['limit', 'cursor'];

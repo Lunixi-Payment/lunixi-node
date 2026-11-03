@@ -19,9 +19,11 @@ const OK = () => 200;
 
 /**
  * Physical POS management — stores, registers, logical terminals with their
- * bank rows and device links, devices, the catalog and the overview
- * (`/api/v1/physical-pos`). Reads need `physical_pos:view`, writes
- * `physical_pos:manage`; a TEST key can only read.
+ * bank rows and device links, devices with their identity keys, the catalog
+ * and the overview (`/api/v1/physical-pos`). Reads need `physical_pos:view`,
+ * writes `physical_pos:manage`, device identity writes (key revocation,
+ * enrollment revert, activation-code revocation) `physical_pos:identity`; a
+ * TEST key can only read. Activation codes are issued in the panel only.
  *
  * Updates and status changes take the `rowVersion` you last read (409
  * `physical_pos.version_conflict` when the record changed). Reason codes are
@@ -284,6 +286,53 @@ class PhysicalPosManagementClient {
     yield* paginate((page) => this.listDeviceAudit(deviceId, page), filters);
   }
 
+  // ── Device identity (`physical_pos:identity` for writes) ────────────────
+
+  /**
+   * The device's identity keys, fingerprints only (`GET /devices/{deviceId}/keys`).
+   * Each key: `keyId`, `algorithm`, `keyStatus` (ACTIVE | SUPERSEDED | REVOKED),
+   * `enrolledVia` (PAIRING | ACTIVATION_CODE | ROTATION), `fingerprint`,
+   * `lineageRootKeyId`, `rotatedFromKeyId`, `activatedAt`, `supersededAt`,
+   * `revokedAt`, `revokeReason`, `rowVersion`.
+   */
+  async listDeviceKeys(deviceId, filters = {}) {
+    return toPage(await this.read(`/devices/${pathId(deviceId, 'deviceId')}/keys`, buildQuery(filters, 'history')));
+  }
+
+  async *iterateDeviceKeys(deviceId, filters = {}) {
+    yield* paginate((page) => this.listDeviceKeys(deviceId, page), filters);
+  }
+
+  /**
+   * Revokes a device key: `{ rowVersion (the key's), reasonCode }`; reasonCode
+   * DEVICE_LOST, DEVICE_STOLEN, KEY_COMPROMISED, DEVICE_REPLACED,
+   * MERCHANT_REQUEST or OTHER. `{ key, lifecycleStatus, replayed }`.
+   */
+  async revokeDeviceKey(deviceId, keyId, request) {
+    const path = `${keyPath(deviceId, keyId)}/revoke`;
+    return unwrap(await this.post(path, buildBody(request, FIELDS.revokeDeviceKey, 'revokeDeviceKey request')));
+  }
+
+  /**
+   * Reverts an activation-code enrollment (revokes the key, suspends the
+   * device): `{ reasonCode }`; NOT_MY_DEVICE, SUSPECTED_PHISHING, WRONG_DEVICE
+   * or OTHER. `{ key, lifecycleStatus, replayed }`.
+   */
+  async revertDeviceEnrollment(deviceId, keyId, request) {
+    const path = `${keyPath(deviceId, keyId)}/revert-enrollment`;
+    return unwrap(await this.post(path, buildBody(request, FIELDS.revertDeviceEnrollment, 'revertDeviceEnrollment request')));
+  }
+
+  /**
+   * Revokes the device's open activation code: `{ reasonCode }`;
+   * MERCHANT_REVOKED, DEVICE_LOST, DEVICE_STOLEN or OTHER.
+   * `{ deviceId, revokedAt, revokeReason }`.
+   */
+  async revokeActivationCode(deviceId, request) {
+    const path = `/devices/${pathId(deviceId, 'deviceId')}/activation-code/revoke`;
+    return unwrap(await this.post(path, buildBody(request, FIELDS.revokeActivationCode, 'revokeActivationCode request')));
+  }
+
   // ── Transport ────────────────────────────────────────────────────────────
 
   read(path, query) {
@@ -304,6 +353,10 @@ class PhysicalPosManagementClient {
     const response = await send(this.api, 'POST', `${BASE}${path}`, body, { idempotencyKey: key });
     return writeResult(response, key, fallbackStatus);
   }
+}
+
+function keyPath(deviceId, keyId) {
+  return `/devices/${pathId(deviceId, 'deviceId')}/keys/${pathId(keyId, 'keyId')}`;
 }
 
 function statusChange(request, operation) {
