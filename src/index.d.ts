@@ -432,6 +432,14 @@ export class CreateIntentRequest {
    * `ConfigurationError`.
    */
   withPromissoryNoteSchedule(schedule: PromissoryNoteScheduleRow[]): this;
+  /**
+   * The installment counts the hosted form may offer for this payment, e.g.
+   * `[1, 2, 3]`; `[1]` closes installments (single payment only). Only narrows
+   * your panel settings, the card and the platform maximum; not calling this
+   * means no restriction. Integers 1–36, no duplicates, 1 included (otherwise
+   * `ConfigurationError`); sent as `enabledInstallments` in ascending order.
+   */
+  withEnabledInstallments(counts: number[]): this;
   withForce3D(value: boolean): this;
   /**
    * Pre-authorization. `true` holds the amount on the card and the payment becomes
@@ -858,6 +866,11 @@ export class InstallmentOptionsRequest {
   withBinOrPan(value: string): this;
   withInstallment(value: number): this;
   withCardBrand(value: string): this;
+  /**
+   * Limits the installment table to these counts (same rules as
+   * `CreateIntentRequest.withEnabledInstallments()`).
+   */
+  withEnabledInstallments(counts: number[]): this;
   toJSON(): JsonObject;
 }
 
@@ -1583,6 +1596,11 @@ export interface PaymentLinkReminders {
 export interface PaymentLinkCheckoutPolicy {
   requireThreeDs?: boolean;
   paymentMethods?: string[];
+  /**
+   * Installment counts the form may offer; empty or left out = no restriction.
+   * Otherwise integers 1–36, no duplicates, 1 included; sent in ascending order.
+   */
+  enabledInstallments?: number[];
 }
 
 /**

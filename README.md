@@ -215,6 +215,15 @@ for await (const row of lunixi.paymentLinks.iterate({ state: ['ACTIVE', 'PAUSED'
 }
 ```
 
+`withCheckout({ requireThreeDs, paymentMethods, enabledInstallments })` narrows
+the link's checkout. `enabledInstallments` follows the rules of
+[installment limits](#installment-limits-enabledinstallments); an empty array
+means no restriction:
+
+```js
+request.withCheckout({ enabledInstallments: [1, 2, 3] }); // at most 3 installments
+```
+
 Amounts are canonical minor-unit strings (`"150000"` = 1,500.00 TRY). Fulfil orders
 from the `payment.captured` webhook, whose payload carries `paymentLinkId` and
 `paymentLinkCode`.
@@ -585,6 +594,37 @@ const request = new CreateIntentRequest('10050', 'TRY', 'ORD-1042').withPreauth(
 const intent = await lunixi.payments.createIntent(request, 'checkout:ORD-1042');
 // later, once the payment is AUTHORIZED:
 await lunixi.payments.capture(paymentId, undefined, 'capture:ORD-1042');
+```
+
+## Installment limits (enabledInstallments)
+
+The buyer picks the installment on the hosted form. `withEnabledInstallments()`
+limits the counts the form may offer for one payment (the same field as
+iyzico's checkout form). The form shows only the counts that your panel
+installment settings, the card and the platform maximum also allow, so the list
+can narrow the choice but never widen it. Without it there is no restriction.
+
+```js
+// At most 3 installments for this order.
+const request = new CreateIntentRequest('10050', 'TRY', 'ORD-1042').withEnabledInstallments([1, 2, 3]);
+const intent = await lunixi.payments.createIntent(request, 'checkout:ORD-1042');
+
+// Single payment only (for example gold or gift cards).
+new CreateIntentRequest('10050', 'TRY', 'ORD-1043').withEnabledInstallments([1]);
+```
+
+The counts are integers from 1 to 36 and must include 1; a duplicate or an
+empty array throws `ConfigurationError` before sending (a duplicate is not
+removed for you). The array is sent in ascending order. A raw `createIntent()`
+body with `enabledInstallments` is checked the same way.
+
+The installment table (`installmentOptions()`) takes the same list, for example
+for a product page tab:
+
+```js
+const table = await lunixi.payments.installmentOptions(
+  new InstallmentOptionsRequest('10050', 'TRY').withEnabledInstallments([1, 2, 3]),
+);
 ```
 
 ## Direct card payments

@@ -111,6 +111,18 @@ class CreateIntentRequest {
     this.payload.promissoryNote = { schedule: requirePromissoryNoteSchedule(schedule) };
     return this;
   }
+  /**
+   * The installment counts the hosted form may offer for this payment, e.g.
+   * `[1, 2, 3]`; `[1]` closes installments (single payment only). The form
+   * shows only the counts also allowed by your panel settings, the card and the
+   * platform maximum. Not calling this means no restriction. Integers 1–36, no
+   * duplicates, 1 included; sent in ascending order. A broken list throws
+   * `ConfigurationError`.
+   */
+  withEnabledInstallments(counts) {
+    this.payload.enabledInstallments = requireEnabledInstallments(counts);
+    return this;
+  }
   withForce3D(value) { this.payload.force3D = Boolean(value); return this; }
   /**
    * Pre-authorization. `true` holds the amount on the card and the payment
@@ -320,6 +332,15 @@ class InstallmentOptionsRequest {
   withBinOrPan(value) { this.payload.binOrPan = value; return this; }
   withInstallment(value) { this.payload.installment = value; return this; }
   withCardBrand(value) { this.payload.cardBrand = value; return this; }
+  /**
+   * Limits the table to these installment counts (e.g. `[1, 2, 3]` for a
+   * product page that allows at most 3). Same rules as
+   * `CreateIntentRequest.withEnabledInstallments()`.
+   */
+  withEnabledInstallments(counts) {
+    this.payload.enabledInstallments = requireEnabledInstallments(counts);
+    return this;
+  }
 
   toJSON() {
     validateMoneyFields(this.payload);
@@ -556,13 +577,20 @@ class CreatePaymentLinkRequest {
 
   /**
    * Narrows the checkout: `requireThreeDs` can only tighten, `paymentMethods` is
-   * a subset of your form settings (empty = your form settings).
+   * a subset of your form settings (empty = your form settings),
+   * `enabledInstallments` lists the installment counts the form may offer
+   * (empty = no restriction; otherwise the rules of
+   * `CreateIntentRequest.withEnabledInstallments()`).
    */
-  withCheckout({ requireThreeDs = false, paymentMethods = [] } = {}) {
-    this.payload.checkout = {
+  withCheckout({ requireThreeDs = false, paymentMethods = [], enabledInstallments = [] } = {}) {
+    const checkout = {
       requireThreeDs: Boolean(requireThreeDs),
       paymentMethods: requireStringArray(paymentMethods, 'paymentMethods'),
     };
+    if (!Array.isArray(enabledInstallments) || enabledInstallments.length > 0) {
+      checkout.enabledInstallments = requireEnabledInstallments(enabledInstallments, 'checkout.enabledInstallments');
+    }
+    this.payload.checkout = checkout;
     return this;
   }
 
@@ -608,6 +636,36 @@ function requirePreauth(value) {
     throw new ConfigurationError(`preauth must be a boolean (true = pre-authorization, false = immediate capture); got ${JSON.stringify(value)}.`);
   }
   return value;
+}
+
+const ENABLED_INSTALLMENTS_MIN = 1;
+const ENABLED_INSTALLMENTS_MAX = 36;
+
+/**
+ * `enabledInstallments` narrows the installment counts of one payment: a
+ * non-empty array of integers 1–36 without duplicates that contains 1.
+ * Leaving the field out means no restriction, so an empty array is refused
+ * (the gateway answers it with 400). A duplicate is an error, not removed.
+ * Returns a copy in ascending order.
+ */
+function requireEnabledInstallments(values, field = 'enabledInstallments') {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new ConfigurationError(`${field} must be a non-empty array of installment counts; leave it out for no restriction, or send [1] for a single payment only.`);
+  }
+  const seen = new Set();
+  for (const value of values) {
+    if (!Number.isInteger(value) || value < ENABLED_INSTALLMENTS_MIN || value > ENABLED_INSTALLMENTS_MAX) {
+      throw new ConfigurationError(`${field} values must be integers from ${ENABLED_INSTALLMENTS_MIN} to ${ENABLED_INSTALLMENTS_MAX}; got ${JSON.stringify(value)}.`);
+    }
+    if (seen.has(value)) {
+      throw new ConfigurationError(`${field} has ${value} more than once.`);
+    }
+    seen.add(value);
+  }
+  if (!seen.has(ENABLED_INSTALLMENTS_MIN)) {
+    throw new ConfigurationError(`${field} must contain 1 (single payment).`);
+  }
+  return [...seen].sort((a, b) => a - b);
 }
 
 function requireOneOf(value, values, field) {
@@ -736,6 +794,7 @@ module.exports = {
   toPlain,
   isoOrNull,
   requirePreauth,
+  requireEnabledInstallments,
   REMOVED_AMOUNT_FIELDS,
   assertNoRemovedAmountFields,
 };

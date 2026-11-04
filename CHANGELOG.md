@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 — 2026-11-04
+
+- Installment limits for one payment: `CreateIntentRequest.withEnabledInstallments(counts)` sends `enabledInstallments`, the installment counts the hosted form may offer (`[1]` = single payment only). It only narrows your panel settings, the card and the platform maximum; without it there is no restriction. A raw `createIntent()` body with `enabledInstallments` is checked the same way.
+- `InstallmentOptionsRequest.withEnabledInstallments(counts)` limits the installment table (`POST /api/v1/bin/installments`) the same way; a raw `installmentOptions()` body is checked too.
+- Payment links: `CreatePaymentLinkRequest.withCheckout()` accepts `enabledInstallments` (`checkout.enabledInstallments`; empty = no restriction).
+- The list is checked before sending (integers 1–36, no duplicates, 1 included; `ConfigurationError` otherwise) and sent in ascending order. Type declarations updated.
+
 ## 1.2.0 — 2026-11-03
 
 - Physical POS end-of-day on `client.physicalPos`: `startSettlement(deviceId, idempotencyKey?)` (`POST /devices/{deviceId}/settlement`, `physical_pos:payments`; empty body, `Idempotency-Key` sent — a new UUID when you pass `null`; 202 new / 200 replay with `{ run, replayed }`), `listSettlementRuns()` / `iterateSettlementRuns()` (`GET /settlement-runs`; filters `deviceId`, `source`, `runStatus`, `createdFrom`, `createdTo`, `includeTotal`) and `getSettlementRun(runId)`.

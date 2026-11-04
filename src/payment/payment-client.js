@@ -3,7 +3,12 @@
 const { minor, validateMoneyFields } = require('../money');
 
 const { ConfigurationError, ValidationError } = require('../errors');
-const { toPlain, requirePreauth, assertNoRemovedAmountFields } = require('./dto');
+const {
+  toPlain,
+  requirePreauth,
+  requireEnabledInstallments,
+  assertNoRemovedAmountFields,
+} = require('./dto');
 const {
   DIRECT_METHOD_PAYMENT_FIELDS,
   CARD_ONLY_FIELDS,
@@ -40,10 +45,11 @@ class PaymentClient {
   /**
    * `POST /payments/intents`. `amount` is the only amount field (the basket
    * total in minor units); a raw body with `price` / `paidPrice` throws
-   * `ConfigurationError` before sending.
+   * `ConfigurationError` before sending. A raw `enabledInstallments` follows
+   * the rules of `CreateIntentRequest.withEnabledInstallments()`.
    */
   async createIntent(request, idempotencyKey = null) {
-    const body = toPlain(request);
+    const body = withSortedEnabledInstallments(toPlain(request));
     assertNoRemovedAmountFields(body);
     validateMoneyFields(body);
     if (body.promissoryNote !== undefined && body.promissoryNote !== null) {
@@ -225,8 +231,12 @@ class PaymentClient {
     return this.api.request('POST', '/api/v1/bin/info', { binOrPan });
   }
 
+  /**
+   * `POST /bin/installments`. A raw `enabledInstallments` follows the rules of
+   * `InstallmentOptionsRequest.withEnabledInstallments()`.
+   */
   installmentOptions(request) {
-    return this.api.request('POST', '/api/v1/bin/installments', toPlain(request));
+    return this.api.request('POST', '/api/v1/bin/installments', withSortedEnabledInstallments(toPlain(request)));
   }
 
   cardTaxonomy() {
@@ -436,6 +446,12 @@ function assertDirectMethodPaymentPayload(payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'force3D') && typeof payload.force3D !== 'boolean') {
     throw new ConfigurationError(`force3D must be a boolean; got ${JSON.stringify(payload.force3D)}.`);
   }
+}
+
+/** Checks a raw body's `enabledInstallments` and returns a copy that sends it in ascending order. */
+function withSortedEnabledInstallments(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.enabledInstallments === undefined) return body;
+  return { ...body, enabledInstallments: requireEnabledInstallments(body.enabledInstallments) };
 }
 
 function actionPath(paymentId, actionId, operation) {

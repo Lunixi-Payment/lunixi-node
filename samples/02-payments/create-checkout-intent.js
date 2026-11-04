@@ -13,6 +13,9 @@ const { sampleClient, idempotencyKey, sampleBuyer, sampleBillingAddress, sampleB
     .withBuyer(sampleBuyer())
     .withBillingAddress(sampleBillingAddress())
     .withBasketItems(sampleBasketItems(amount))
+    // The form offers at most 3 installments for this order. For a product
+    // sold in a single payment only (for example gold), use withEnabledInstallments([1]).
+    .withEnabledInstallments([1, 2, 3])
     .withSettings({
       paymentMethods: ['card'],
       threeD: { mode: 'auto', forceAmountMinor: '500000' },
