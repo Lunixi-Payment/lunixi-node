@@ -14,7 +14,7 @@ const promissoryNoteValues = require('./payment/promissory-note-values');
 const splitPaymentValues = require('./payment/split-payment-values');
 const { SplitPaymentRequest } = require('./payment/split-payment-request');
 const { ReferenceClient } = require('./reference/reference-client');
-const { InsuranceItemCategory } = require('./payment/basket-item-values');
+const { InsuranceItemCategory, ProductCategory } = require('./payment/basket-item-values');
 const { FraudClient } = require('./fraud/fraud-client');
 const { WalletClient } = require('./wallet/wallet-client');
 const walletValues = require('./wallet/wallet-values');
@@ -109,6 +109,7 @@ module.exports = {
   Address,
   BasketItem,
   InsuranceItemCategory,
+  ProductCategory,
   CreateIntentRequest,
   DirectMethodPaymentRequest,
   InstallmentOptionsRequest,

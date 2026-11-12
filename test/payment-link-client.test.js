@@ -380,6 +380,13 @@ test('builders reject decimal money and values outside the closed sets', () => {
   assert.throws(() => new PaymentLinkItem('Bilet', '1000').withImageAssetId('https://cdn.example/x.png'), /imageAssetId must be an asset id/);
 });
 
+test('payment link item carries productCategory', () => {
+  assert.deepEqual(new PaymentLinkItem('Telefon', '1000').withProductCategory('MOBILE_PHONE').toJSON(), {
+    name: 'Telefon', unitPriceMinor: '1000', productCategory: 'MOBILE_PHONE',
+  });
+  assert.throws(() => new PaymentLinkItem('Telefon', '1000').withProductCategory(''), /productCategory must be a non-empty string/);
+});
+
 test('nested objects are checked against the keys the gateway DTO declares', () => {
   const base = () => CreatePaymentLinkRequest.fixed('SINGLE_USE', '1000', 'TRY', 'x');
 

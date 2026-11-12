@@ -43,4 +43,54 @@ const InsuranceItemCategory = Object.freeze({
   EDUCATION: 'EDUCATION',
 });
 
-module.exports = { InsuranceItemCategory };
+/**
+ * Lunixi product category (`productCategory`). Used by payment methods with
+ * legal installment limits (e.g. shopping loan) and other platform features.
+ * Optional on every endpoint that takes basket items and on payment link
+ * items; an unknown value is answered with 400. The list only grows by
+ * appending.
+ */
+const ProductCategory = Object.freeze({
+  MOBILE_PHONE: 'MOBILE_PHONE',
+  TABLET: 'TABLET',
+  COMPUTER: 'COMPUTER',
+  TV_AUDIO: 'TV_AUDIO',
+  WHITE_GOODS: 'WHITE_GOODS',
+  SMALL_APPLIANCE: 'SMALL_APPLIANCE',
+  CAMERA: 'CAMERA',
+  GAME_CONSOLE: 'GAME_CONSOLE',
+  WEARABLE: 'WEARABLE',
+  ELECTRONICS_ACCESSORY: 'ELECTRONICS_ACCESSORY',
+  ELECTRONICS_OTHER: 'ELECTRONICS_OTHER',
+  GOLD: 'GOLD',
+  JEWELRY: 'JEWELRY',
+  WATCH: 'WATCH',
+  APPAREL: 'APPAREL',
+  SHOES_BAGS: 'SHOES_BAGS',
+  COSMETICS: 'COSMETICS',
+  FURNITURE: 'FURNITURE',
+  HOME_LIVING: 'HOME_LIVING',
+  GROCERY: 'GROCERY',
+  BOOKS_MEDIA: 'BOOKS_MEDIA',
+  TOYS: 'TOYS',
+  SPORTS_OUTDOOR: 'SPORTS_OUTDOOR',
+  PET_SUPPLIES: 'PET_SUPPLIES',
+  AUTO_PARTS: 'AUTO_PARTS',
+  MUSICAL_INSTRUMENT: 'MUSICAL_INSTRUMENT',
+  MICROMOBILITY: 'MICROMOBILITY',
+  VEHICLE: 'VEHICLE',
+  TRANSPORT_TICKET: 'TRANSPORT_TICKET',
+  EVENT_TICKET: 'EVENT_TICKET',
+  ACCOMMODATION: 'ACCOMMODATION',
+  TRAVEL_PACKAGE: 'TRAVEL_PACKAGE',
+  HEALTH_SERVICE: 'HEALTH_SERVICE',
+  EDUCATION: 'EDUCATION',
+  SHIPPING_SERVICE: 'SHIPPING_SERVICE',
+  DIGITAL_GOODS: 'DIGITAL_GOODS',
+  GIFT_CARD: 'GIFT_CARD',
+  SUBSCRIPTION: 'SUBSCRIPTION',
+  SERVICE_OTHER: 'SERVICE_OTHER',
+  OTHER: 'OTHER',
+});
+
+module.exports = { InsuranceItemCategory, ProductCategory };

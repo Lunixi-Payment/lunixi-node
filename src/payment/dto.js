@@ -388,6 +388,11 @@ class PaymentLinkItem {
   withCapacity(value) { this.payload.capacity = nullableInteger(value, 'capacity'); return this; }
   /** Id of a published payment-link image asset of your organisation (uuid); `null` = none. */
   withImageAssetId(value) { this.payload.imageAssetId = nullableAssetId(value, 'imageAssetId'); return this; }
+  /**
+   * Lunixi product category (`ProductCategory`). Not checked against the list here:
+   * the list only grows and the gateway answers an unknown value with 400.
+   */
+  withProductCategory(value) { this.payload.productCategory = requireText(value, 'productCategory'); return this; }
 
   toJSON() {
     return { ...this.payload };

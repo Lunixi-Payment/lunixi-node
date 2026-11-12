@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-11-12
+
+- Basket items: optional `productCategory`, the Lunixi product category (`ProductCategory`, 40 codes, e.g. `MOBILE_PHONE`). Used by payment methods with legal installment limits (e.g. shopping loan) and other platform features. Accepted on every endpoint that takes `basketItems` (checkout intent, direct 2D/3D, marketplace); an unknown value is answered with 400, without it nothing changes. `BasketItem` already sends it as given; the field is typed in `index.d.ts`.
+- Payment links: `PaymentLinkItem.withProductCategory(value)` sends `productCategory` on a link item.
+
 ## 1.3.0 — 2026-11-04
 
 - Installment limits for one payment: `CreateIntentRequest.withEnabledInstallments(counts)` sends `enabledInstallments`, the installment counts the hosted form may offer (`[1]` = single payment only). It only narrows your panel settings, the card and the platform maximum; without it there is no restriction. A raw `createIntent()` body with `enabledInstallments` is checked the same way.

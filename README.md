@@ -112,7 +112,35 @@ merchantApp.use('/billing', createCheckoutApp({ lunixi, nativeCheckout }));
 
 ## Basket items and insurance
 
-`itemType` is `PHYSICAL` or `VIRTUAL` on every endpoint. A basket item sent to
+`itemType` is `PHYSICAL` or `VIRTUAL` on every endpoint.
+
+`productCategory` (optional, `ProductCategory`) is the Lunixi product category
+of the item. It is used by payment methods with legal installment limits (e.g.
+shopping loan) and other platform features. Every endpoint that takes basket
+items accepts it, and so does a payment link item
+(`PaymentLinkItem.withProductCategory()`). An unknown value is answered with
+400; without it nothing changes. The list only grows by appending, so the SDK
+sends the value as given.
+
+```js
+const { BasketItem, ProductCategory } = require('@lunixi/node-sdk');
+
+new BasketItem({
+  id: 'item-1', price: "1500000", name: 'Smartphone', category1: 'phone',
+  itemType: BasketItem.TYPE_PHYSICAL, productCategory: ProductCategory.MOBILE_PHONE,
+});
+```
+
+Codes: `MOBILE_PHONE`, `TABLET`, `COMPUTER`, `TV_AUDIO`, `WHITE_GOODS`,
+`SMALL_APPLIANCE`, `CAMERA`, `GAME_CONSOLE`, `WEARABLE`, `ELECTRONICS_ACCESSORY`,
+`ELECTRONICS_OTHER`, `GOLD`, `JEWELRY`, `WATCH`, `APPAREL`, `SHOES_BAGS`,
+`COSMETICS`, `FURNITURE`, `HOME_LIVING`, `GROCERY`, `BOOKS_MEDIA`, `TOYS`,
+`SPORTS_OUTDOOR`, `PET_SUPPLIES`, `AUTO_PARTS`, `MUSICAL_INSTRUMENT`,
+`MICROMOBILITY`, `VEHICLE`, `TRANSPORT_TICKET`, `EVENT_TICKET`, `ACCOMMODATION`,
+`TRAVEL_PACKAGE`, `HEALTH_SERVICE`, `EDUCATION`, `SHIPPING_SERVICE`,
+`DIGITAL_GOODS`, `GIFT_CARD`, `SUBSCRIPTION`, `SERVICE_OTHER`, `OTHER`.
+
+A basket item sent to
 `createIntent` (Checkout Form) can also carry the optional insurance fields, so
 the checkout can offer insurance for it:
 
@@ -982,8 +1010,8 @@ your own account.
   that sibling field has that value, and must be left out otherwise.
 - The plan is either a schedule or a note count, never both:
   - `withPromissoryNoteSchedule([{ amount, dueDate }])`: amounts in minor units
-    adding up to `amount`, `YYYY-MM-DD` due dates after today (Istanbul) in
-    ascending order, at most 24 rows;
+    adding up to `amount`, `YYYY-MM-DD` due dates at least 8 days after the issue
+    date (Istanbul) in ascending order, at most 24 rows;
   - `withPromissoryNoteCount(count)`: the amount is split evenly (the remaining
     minor units go to the last note) and due dates follow your connection
     settings. Allowed counts are the `noteCount` options in `inputFields`.

@@ -11,6 +11,7 @@ const {
   BasketItem,
   CreateIntentRequest,
   InsuranceItemCategory,
+  ProductCategory,
   DirectMethodPaymentRequest,
   ConfigurationError,
 } = require('../src');
@@ -121,6 +122,31 @@ test('insurance item categories match the gateway list', () => {
     'PET', 'MICROMOBILITY', 'MUSICAL_INSTRUMENT', 'SHIPMENT', 'EDUCATION',
   ]);
   assert.ok(Object.isFrozen(InsuranceItemCategory));
+});
+
+test('product categories match the gateway list, in order', () => {
+  assert.deepEqual(Object.values(ProductCategory), [
+    'MOBILE_PHONE', 'TABLET', 'COMPUTER', 'TV_AUDIO', 'WHITE_GOODS', 'SMALL_APPLIANCE', 'CAMERA', 'GAME_CONSOLE',
+    'WEARABLE', 'ELECTRONICS_ACCESSORY', 'ELECTRONICS_OTHER', 'GOLD', 'JEWELRY', 'WATCH', 'APPAREL', 'SHOES_BAGS',
+    'COSMETICS', 'FURNITURE', 'HOME_LIVING', 'GROCERY', 'BOOKS_MEDIA', 'TOYS', 'SPORTS_OUTDOOR', 'PET_SUPPLIES',
+    'AUTO_PARTS', 'MUSICAL_INSTRUMENT', 'MICROMOBILITY', 'VEHICLE', 'TRANSPORT_TICKET', 'EVENT_TICKET',
+    'ACCOMMODATION', 'TRAVEL_PACKAGE', 'HEALTH_SERVICE', 'EDUCATION', 'SHIPPING_SERVICE', 'DIGITAL_GOODS',
+    'GIFT_CARD', 'SUBSCRIPTION', 'SERVICE_OTHER', 'OTHER',
+  ]);
+  assert.ok(Object.isFrozen(ProductCategory));
+});
+
+test('checkout intent carries the basket item productCategory as given', async () => {
+  const { client, calls } = makeClient();
+  const phone = { id: 'item-1', price: "100000", name: 'Phone', category1: 'phone', itemType: 'PHYSICAL', productCategory: ProductCategory.MOBILE_PHONE };
+  const plain = { id: 'item-2', price: "50000", name: 'Case', category1: 'accessory', itemType: 'PHYSICAL', productCategory: null };
+  const request = new CreateIntentRequest('150000', 'TRY', 'order-1').withBasketItems([new BasketItem(phone), new BasketItem(plain)]);
+
+  await client.payments.createIntent(request, 'checkout:order-1');
+
+  const body = JSON.parse(calls.at(-1).body);
+  assert.deepEqual(body.basketItems[0], phone);
+  assert.deepEqual(Object.keys(body.basketItems[1]), ['id', 'price', 'name', 'category1', 'itemType'], 'a null productCategory is left out');
 });
 
 test('token request is signed and bodyless', async () => {

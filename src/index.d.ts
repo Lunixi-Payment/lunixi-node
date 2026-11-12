@@ -178,6 +178,56 @@ export const InsuranceItemCategory: {
 export type InsuranceItemCategoryValue = (typeof InsuranceItemCategory)[keyof typeof InsuranceItemCategory];
 
 /**
+ * Lunixi product category (`productCategory`). Used by payment methods with
+ * legal installment limits (e.g. shopping loan) and other platform features.
+ * Optional; an unknown value is answered with 400. The list only grows by appending.
+ */
+export const ProductCategory: {
+  readonly MOBILE_PHONE: 'MOBILE_PHONE';
+  readonly TABLET: 'TABLET';
+  readonly COMPUTER: 'COMPUTER';
+  readonly TV_AUDIO: 'TV_AUDIO';
+  readonly WHITE_GOODS: 'WHITE_GOODS';
+  readonly SMALL_APPLIANCE: 'SMALL_APPLIANCE';
+  readonly CAMERA: 'CAMERA';
+  readonly GAME_CONSOLE: 'GAME_CONSOLE';
+  readonly WEARABLE: 'WEARABLE';
+  readonly ELECTRONICS_ACCESSORY: 'ELECTRONICS_ACCESSORY';
+  readonly ELECTRONICS_OTHER: 'ELECTRONICS_OTHER';
+  readonly GOLD: 'GOLD';
+  readonly JEWELRY: 'JEWELRY';
+  readonly WATCH: 'WATCH';
+  readonly APPAREL: 'APPAREL';
+  readonly SHOES_BAGS: 'SHOES_BAGS';
+  readonly COSMETICS: 'COSMETICS';
+  readonly FURNITURE: 'FURNITURE';
+  readonly HOME_LIVING: 'HOME_LIVING';
+  readonly GROCERY: 'GROCERY';
+  readonly BOOKS_MEDIA: 'BOOKS_MEDIA';
+  readonly TOYS: 'TOYS';
+  readonly SPORTS_OUTDOOR: 'SPORTS_OUTDOOR';
+  readonly PET_SUPPLIES: 'PET_SUPPLIES';
+  readonly AUTO_PARTS: 'AUTO_PARTS';
+  readonly MUSICAL_INSTRUMENT: 'MUSICAL_INSTRUMENT';
+  readonly MICROMOBILITY: 'MICROMOBILITY';
+  readonly VEHICLE: 'VEHICLE';
+  readonly TRANSPORT_TICKET: 'TRANSPORT_TICKET';
+  readonly EVENT_TICKET: 'EVENT_TICKET';
+  readonly ACCOMMODATION: 'ACCOMMODATION';
+  readonly TRAVEL_PACKAGE: 'TRAVEL_PACKAGE';
+  readonly HEALTH_SERVICE: 'HEALTH_SERVICE';
+  readonly EDUCATION: 'EDUCATION';
+  readonly SHIPPING_SERVICE: 'SHIPPING_SERVICE';
+  readonly DIGITAL_GOODS: 'DIGITAL_GOODS';
+  readonly GIFT_CARD: 'GIFT_CARD';
+  readonly SUBSCRIPTION: 'SUBSCRIPTION';
+  readonly SERVICE_OTHER: 'SERVICE_OTHER';
+  readonly OTHER: 'OTHER';
+};
+export type ProductCategoryValue = (typeof ProductCategory)[keyof typeof ProductCategory];
+export type ProductCategory = ProductCategoryValue;
+
+/**
  * Facts about the item that prefill the insurance type's fields. A key the
  * type uses goes to the same field of its type object
  * (`InsuranceProduct.typeObject`): the Checkout Form shows it filled in and the
@@ -366,6 +416,8 @@ export interface BasketItemFields {
   category1?: string;
   category2?: string;
   itemType?: BasketItemType;
+  /** Lunixi product category; optional on every endpoint that takes basket items. Unknown values: 400. */
+  productCategory?: ProductCategory;
   /** Required when `insuranceTypes`, `insuranceValueAmount`, `insuranceContext` or `insuranceData` is sent. */
   insuranceCategory?: InsuranceItemCategoryValue;
   /** Lunixi insurance type codes (e.g. `TICKET_CANCELLATION`), unique, at most 10. Narrows the category's types. */
@@ -1542,6 +1594,8 @@ export interface PaymentLinkItemFields {
   /** Units available for this line; `null` = unlimited. */
   capacity?: number | null;
   imageAssetId?: string | null;
+  /** Lunixi product category; optional. Unknown values: 400. */
+  productCategory?: ProductCategory;
 }
 
 export interface PaymentLinkCustomFieldFields {
@@ -1664,6 +1718,8 @@ export class PaymentLinkItem {
   withQuantityRange(minQuantity: number, maxQuantity: number): this;
   withCapacity(value: number | null): this;
   withImageAssetId(value: string | null): this;
+  /** Lunixi product category (`ProductCategory`). */
+  withProductCategory(value: ProductCategory): this;
   toJSON(): PaymentLinkItemFields;
 }
 

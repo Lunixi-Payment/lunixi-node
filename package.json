@@ -1,6 +1,6 @@
 {
   "name": "@lunixi/node-sdk",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Lunixi server-side Node.js integration SDK",
   "homepage": "https://github.com/Lunixi-Payment/lunixi-node#readme",
   "repository": {
